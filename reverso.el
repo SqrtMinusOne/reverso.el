@@ -33,7 +33,8 @@
 (require 'url-util)
 
 (defgroup reverso nil
-  "Client for the https://reverso.net translation service.")
+  "Client for the https://reverso.net translation service."
+  :group 'applications)
 
 (defface reverso-highlight-face
   '((t (:inherit bold)))
@@ -71,7 +72,28 @@
     (turkish . tur)
     (chinese . chi)
     (english . eng))
-  "Mapping from long language names to short ones.")
+  "Mapping from long language names to short ones.
+
+This one is used for the translation queries.")
+
+(defconst reverso--language-mapping-1
+  '((arabic . ar)
+    (german . de)
+    (english . en)
+    (french . fr)
+    (spanish . es)
+    (french . fr)
+    (hebrew . he)
+    (italian . it)
+    (japanese . ja)
+    (dutch . nl)
+    (polish . pl)
+    (portuguese . pt)
+    (romanian . ro)
+    (russian . ru))
+  "Mapping from long language names to short ones.
+
+This one is used for the synonyms queries.")
 
 (defconst reverso--languages-compatible
   `((context
@@ -171,21 +193,56 @@ that is called with the result."
             (lambda (&key error-thrown &allow-other-keys)
               (message "Error!: %S" error-thrown)))))
 
+(defun reverso--convert-string (dom)
+  "Convert html DOM from reverso API to fontified string.
+
+reverso.net uses tags to highlight relevant works, e.g. <em> for the
+selected word in the context search.  This function fontifies words
+that are in tags with `reverso-highlight-face'"
+  (thread-last
+    (mapconcat (lambda (node)
+                 (let ((text (string-trim (if (listp node) (dom-texts node) node)))
+                       (is-special (listp node)))
+                   (if is-special
+                       (propertize text 'face 'reverso-highlight-face)
+                     text)))
+               (dom-children dom)
+               " ")
+    (string-trim)
+    (replace-regexp-in-string
+     (rx (+ (syntax whitespace))",") ",")
+    (replace-regexp-in-string
+     (rx (+ (syntax whitespace))) " ")))
+
+(defun reverso--convert-string-html (html)
+  "Convert HTML string from reverso API to fontified string."
+  (with-temp-buffer
+    (insert "<html><body>" html "<body></html>")
+    (reverso--convert-string
+     (car
+      (dom-by-tag
+       (libxml-parse-html-region (point-min) (point-max))
+       'body)))))
+
 (defun reverso--translate-parse (response)
   "Convert RESPONSE from reverso into an alist."
+  (setq my/test2 response)
   (let ((corrected-text (alist-get 'correctedText response))
         (language-from (alist-get 'from response))
         (language-to (alist-get 'to response))
         (detected-language (alist-get 'detectedLanguage
                                       (alist-get 'languageDetection response)))
         (translation (alist-get 'translation response))
-        (context-results (mapcar
-                          (lambda (r)
-                            `((translation . ,(alist-get 'translation r))
-                              (sources . ,(alist-get 'sourceExamples r))
-                              (targets . ,(alist-get 'targetExamples r))))
-                          (alist-get 'results
-                                     (alist-get 'contextResults response)))))
+        (context-results
+         (cl-loop for r across (alist-get 'results (alist-get 'contextResults response))
+                  collect
+                  `((translation . ,(alist-get 'translation r))
+                    (context
+                     . ,(cl-loop for source across (alist-get 'sourceExamples r)
+                                 for target across (alist-get 'targetExamples r)
+                                 collect
+                                 `((source . ,(reverso--convert-string-html source))
+                                   (target . ,(reverso--convert-string-html target)))))))))
     `((corrected-text . ,corrected-text)
       (language-from . ,language-from)
       (language-to . ,language-to)
@@ -230,24 +287,10 @@ that is called with the result."
             (lambda (&key error-thrown &allow-other-keys)
               (message "Error!: %S" error-thrown)))))
 
-(defun reverso--convert-string (dom)
-  (thread-last
-    (mapconcat (lambda (node)
-                 (let ((text (string-trim (if (listp node) (dom-texts node) node)))
-                       (is-special (listp node)))
-                   (if is-special
-                       (propertize text 'face 'reverso-highlight-face)
-                     text)))
-               (dom-children dom)
-               " ")
-    (string-trim)
-    (replace-regexp-in-string
-     (rx (+ (syntax whitespace))",") ",")
-    (replace-regexp-in-string
-     (rx (+ (syntax whitespace))) " ")))
-
 (defun reverso--get-context-parse (data)
-  (setq my/test2 data)
+  "Parse response from reverso context API into an alist.
+
+DATA is an html string."
   (let ((html (with-temp-buffer
                 (insert data)
                 (libxml-parse-html-region (point-min) (point-max)))))
@@ -260,9 +303,45 @@ that is called with the result."
                          `((source . ,(reverso--convert-string src))
                            (target . ,(reverso--convert-string trg))))))))
 
-;; (reverso--get-context "Нахер" 'russian 'english
-;;                       (lambda (data)
-;;                         (setq my/test1 data)))
+(defun reverso--get-synomyms (text language cb)
+  (unless (alist-get language reverso--language-mapping-1)
+    (error "Wrong language: %s" language))
+  (request (concat (alist-get 'synomyms reverso--urls)
+                   (symbol-name (alist-get language reverso--language-mapping-1)) "/"
+                   (url-hexify-string text))
+    :type "GET"
+    :headers `(("Accept" . "*/*")
+               ("Connection" . "keep-alive")
+               ("User-Agent" . ,reverso--user-agent))
+    :parser 'buffer-string
+    :encoding 'utf-8
+    :success (cl-function
+              (lambda (&key data &allow-other-keys)
+                (funcall cb (reverso--get-synomyms-parse data))))
+    :error (cl-function
+            (lambda (&key error-thrown &allow-other-keys)
+              (message "Error!: %S" error-thrown)))))
+
+(defun reverso--get-synomyms-parse (html)
+  (setq my/test1 html)
+  (let* ((dom (with-temp-buffer
+                (insert html)
+                (libxml-parse-html-region (point-min) (point-max)))))
+    (cl-loop
+     for child in (dom-non-text-children (dom-by-id dom "synomyms"))
+     if (string-match-p (dom-attr child 'class) "wrap-hold-prop")
+     collect
+     ((kind . ,(car (dom-text (dom-by-class child "words-options"))))
+      (synonyms
+       . ,(cl-loop
+           for synonym in (dom-non-text-children
+                           (dom-by-class (car (dom-by-class child "word-opt"))
+                                         "word-box"))
+           collect (dom-text synonym)))))))
+
+;; (reverso--get-synomyms "Believe" 'english (lambda (data) (setq my/test2 data)))
+
+;; (reverso--get-synomyms-parse my/test1)
 
 
 (provide 'reverso)
