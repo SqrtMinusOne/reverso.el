@@ -30,6 +30,15 @@
 ;;; Code:
 (require 'request)
 (require 'transient)
+(require 'url-util)
+
+(defgroup reverso nil
+  "Client for the https://reverso.net translation service.")
+
+(defface reverso-highlight-face
+  '((t (:inherit bold)))
+  "Face for highlighting selected words in translation."
+  :group 'reverso)
 
 (defconst reverso--languages
   '((translation . (arabic chinese dutch english french german hebrew
@@ -61,7 +70,44 @@
     (ukrainian . ukr)
     (turkish . tur)
     (chinese . chi)
-    (english . eng)))
+    (english . eng))
+  "Mapping from long language names to short ones.")
+
+(defconst reverso--languages-compatible
+  `((context
+     . ((english . (arabic german spanish french hebrew italian
+                           japanese dutch polish portuguese romanian
+                           russian turkish chinese))
+        (arabic . (english german spanish french hebrew italian
+                           portuguese russian turkish))
+        (german . (arabic english spanish french hebrew italian
+                          japanese dutch polish portuguese romanian
+                          russian turkish))
+        (spanish . (arabic german english french hebrew italian
+                           japanese dutch polish portuguese romanian
+                           russian turkish chinese))
+        (french . (arabic german spanish english hebrew italian
+                          japanese dutch polish portuguese romanian
+                          russian turkish chinese))
+        (hebrew . (arabic german spanish french english italian dutch
+                          portuguese russian))
+        (italian . (arabic german spanish french hebrew english
+                           japanese dutch polish portuguese romanian
+                           russian turkish chinese))
+        (japanese . (german spanish french italian english portuguese
+                            russian))
+        (dutch . (german spanish french hebrew italian english
+                         portuguese russian))
+        (polish . (german spanish french italian english))
+        (portuguese . (arabic german spanish french hebrew italian
+                              japanese dutch english russian turkish))
+        (romanian . (german spanish french italian english turkish))
+        (russian . (arabic german spanish french hebrew italian
+                           japanese dutch portuguese english))
+        (turkish . (arabic german spanish french italian portuguese
+                           romanian english))
+        (chinese . (english french spanish)))))
+  "Which languages are compatible with which.")
 
 (defconst reverso--urls
   '((translation . "https://api.reverso.net/translate/v1/translation")
@@ -89,9 +135,17 @@ A random one is be picked at package initialization.")
   "User-Agent to use for reverse.el requests.")
 
 (defun reverso--translate (text source target cb)
-  (unless (alist-get source reverso--language-mapping)
+  "Translate TEXT from language SOURCE to TARGET.
+
+SOURCE and TARGET are keys of `reverso--languages'.  CB is a function
+that is called with the result."
+  (unless (and (alist-get source reverso--language-mapping)
+               (member source
+                       (alist-get 'translation reverso--languages)))
     (error "Wrong language: %s" source))
-  (unless (alist-get target reverso--language-mapping)
+  (unless (and (alist-get target reverso--language-mapping)
+               (member source
+                       (alist-get 'translation reverso--languages)))
     (error "Wrong language: %s" target))
   (request (alist-get 'translation reverso--urls)
     :type "POST"
@@ -112,12 +166,103 @@ A random one is be picked at package initialization.")
     :encoding 'utf-8
     :success (cl-function
               (lambda (&key data &allow-other-keys)
-                (funcall cb data)))
+                (funcall cb (reverso--translate-parse data))))
     :error (cl-function
             (lambda (&key error-thrown &allow-other-keys)
               (message "Error!: %S" error-thrown)))))
 
-;; (reverso--translate "Your god is war" 'english 'german (lambda (&rest kek) (setq my/test kek)))
+(defun reverso--translate-parse (response)
+  "Convert RESPONSE from reverso into an alist."
+  (let ((corrected-text (alist-get 'correctedText response))
+        (language-from (alist-get 'from response))
+        (language-to (alist-get 'to response))
+        (detected-language (alist-get 'detectedLanguage
+                                      (alist-get 'languageDetection response)))
+        (translation (alist-get 'translation response))
+        (context-results (mapcar
+                          (lambda (r)
+                            `((translation . ,(alist-get 'translation r))
+                              (sources . ,(alist-get 'sourceExamples r))
+                              (targets . ,(alist-get 'targetExamples r))))
+                          (alist-get 'results
+                                     (alist-get 'contextResults response)))))
+    `((corrected-text . ,corrected-text)
+      (language-from . ,language-from)
+      (language-to . ,language-to)
+      (detected-language
+       . ,(when (and detected-language
+                     (not (string= detected-language language-from)))
+            detected-language))
+      (translation . ,translation)
+      (context-results . ,context-results))))
+
+(defun reverso--get-context (text source target cb)
+  "Do a context translation for TEXT from SOURCE to TARGET.
+
+SOURCE and TARGET are keys of `reverso--languages'.  CB is a function
+that is called with the result."
+  (unless (and (alist-get source reverso--language-mapping)
+               (member source
+                       (alist-get 'translation reverso--languages)))
+    (error "Wrong language: %s" source))
+  (unless (and (alist-get target reverso--language-mapping)
+               (member source
+                       (alist-get 'translation reverso--languages)))
+    (error "Wrong language: %s" target))
+  (unless (member target
+                  (alist-get source
+                             (alist-get 'context reverso--languages-compatible)))
+    (error "Language %s is not compatible with %s" target source))
+  (request (concat (alist-get 'context reverso--urls)
+                   (symbol-name source) "-" (symbol-name target) "/"
+                   (replace-regexp-in-string
+                    "%20" "+" (url-hexify-string text) t t))
+    :type "GET"
+    :headers `(("Accept" . "*/*")
+               ("Connection" . "keep-alive")
+               ("User-Agent" . ,reverso--user-agent))
+    :parser 'buffer-string
+    :encoding 'utf-8
+    :success (cl-function
+              (lambda (&key data &allow-other-keys)
+                (funcall cb (reverso--get-context-parse data))))
+    :error (cl-function
+            (lambda (&key error-thrown &allow-other-keys)
+              (message "Error!: %S" error-thrown)))))
+
+(defun reverso--convert-string (dom)
+  (thread-last
+    (mapconcat (lambda (node)
+                 (let ((text (string-trim (if (listp node) (dom-texts node) node)))
+                       (is-special (listp node)))
+                   (if is-special
+                       (propertize text 'face 'reverso-highlight-face)
+                     text)))
+               (dom-children dom)
+               " ")
+    (string-trim)
+    (replace-regexp-in-string
+     (rx (+ (syntax whitespace))",") ",")
+    (replace-regexp-in-string
+     (rx (+ (syntax whitespace))) " ")))
+
+(defun reverso--get-context-parse (data)
+  (setq my/test2 data)
+  (let ((html (with-temp-buffer
+                (insert data)
+                (libxml-parse-html-region (point-min) (point-max)))))
+    (let ((examples (dom-by-id html "examples-content")))
+      (cl-loop for child in (dom-non-text-children examples)
+               for classes = (alist-get 'class (dom-attributes child))
+               when (string-match-p (rx "example") classes)
+               collect (let ((src (dom-by-class (dom-by-class child "src") "text"))
+                             (trg (dom-by-class (dom-by-class child "trg") "text")))
+                         `((source . ,(reverso--convert-string src))
+                           (target . ,(reverso--convert-string trg))))))))
+
+;; (reverso--get-context "Нахер" 'russian 'english
+;;                       (lambda (data)
+;;                         (setq my/test1 data)))
 
 
 (provide 'reverso)
