@@ -50,7 +50,7 @@
                        japanese dutch polish portugese romanian
                        russian swedish turkish ukrainian chinese))
     (grammar . (english french))
-    (synonims . (arabic german english spanish french hebrew italian
+    (synonyms . (arabic german english spanish french hebrew italian
                         japanese dutch polish portugese romanian
                         russian)))
   "Available languages for diferent operations.")
@@ -194,7 +194,7 @@ that is called with the result."
               (message "Error!: %S" error-thrown)))))
 
 (defun reverso--convert-string (dom)
-  "Convert html DOM from reverso API to fontified string.
+  "Convert html DOM from the reverso API to fontified string.
 
 reverso.net uses tags to highlight relevant works, e.g. <em> for the
 selected word in the context search.  This function fontifies words
@@ -215,7 +215,7 @@ that are in tags with `reverso-highlight-face'"
      (rx (+ (syntax whitespace))) " ")))
 
 (defun reverso--convert-string-html (html)
-  "Convert HTML string from reverso API to fontified string."
+  "Convert HTML string from the reverso API to fontified string."
   (with-temp-buffer
     (insert "<html><body>" html "<body></html>")
     (reverso--convert-string
@@ -225,7 +225,7 @@ that are in tags with `reverso-highlight-face'"
        'body)))))
 
 (defun reverso--translate-parse (response)
-  "Convert RESPONSE from reverso into an alist."
+  "Convert RESPONSE from the reverso translation API into an alist."
   (setq my/test2 response)
   (let ((corrected-text (alist-get 'correctedText response))
         (language-from (alist-get 'from response))
@@ -304,6 +304,9 @@ DATA is an html string."
                            (target . ,(reverso--convert-string trg))))))))
 
 (defun reverso--get-synomyms (text language cb)
+  "Get synomyms for TEXT in LANGUAGE.
+
+CB is a function that is called with the result."
   (unless (alist-get language reverso--language-mapping-1)
     (error "Wrong language: %s" language))
   (request (concat (alist-get 'synomyms reverso--urls)
@@ -323,25 +326,47 @@ DATA is an html string."
               (message "Error!: %S" error-thrown)))))
 
 (defun reverso--get-synomyms-parse (html)
-  (setq my/test1 html)
+  "Parse the reverso synomyms page.
+
+HTML is a string."
   (let* ((dom (with-temp-buffer
                 (insert html)
                 (libxml-parse-html-region (point-min) (point-max)))))
     (cl-loop
-     for child in (dom-non-text-children (dom-by-id dom "synomyms"))
-     if (string-match-p (dom-attr child 'class) "wrap-hold-prop")
+     for child in (dom-non-text-children
+                   (dom-by-id (dom-by-tag dom 'body) "synonyms"))
+     if (string-match-p "wrap-hold-prop" (or (dom-attr child 'class) ""))
      collect
-     ((kind . ,(car (dom-text (dom-by-class child "words-options"))))
-      (synonyms
-       . ,(cl-loop
-           for synonym in (dom-non-text-children
-                           (dom-by-class (car (dom-by-class child "word-opt"))
-                                         "word-box"))
-           collect (dom-text synonym)))))))
+     `((kind . ,(string-trim (dom-texts (dom-by-class child "words-options"))))
+       (synonyms
+        . ,(cl-loop
+            for synonym in (dom-non-text-children
+                            (dom-by-class (car (dom-by-class child "word-opt"))
+                                          "word-box"))
+            for a = (car (dom-by-tag synonym 'a))
+            collect
+            `((synonym . ,(string-trim (dom-texts synonym)))
+              (relevant
+               . ,(and (string-match-p "relevant" (or (dom-attr a 'class) "")) t)))))
+       (examples
+        . ,(cl-loop
+            for example in (dom-non-text-children
+                            (dom-by-class child "phrases-examples"))
+            for span = (car (dom-by-tag example 'span))
+            if span
+            collect (reverso--convert-string span)))
+       (antonyms
+        . ,(cl-loop
+            for antonym in (dom-non-text-children
+                            (dom-by-class (car (dom-by-class child "antonyms-wrapper"))
+                                          "word-box"))
+            for a = (car (dom-by-tag antonym 'a))
+            for text = (string-trim (dom-texts antonym))
+            unless (string-match-p (rx "...") text)
+            collect
+            `((antonym . ,text))))))))
 
-;; (reverso--get-synomyms "Believe" 'english (lambda (data) (setq my/test2 data)))
-
-;; (reverso--get-synomyms-parse my/test1)
+;; (reverso--get-synomyms "Color" 'english (lambda (data) (setq my/test2 data)))
 
 
 (provide 'reverso)
