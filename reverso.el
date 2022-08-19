@@ -41,6 +41,11 @@
   "Face for highlighting selected words in translation."
   :group 'reverso)
 
+(defface reverso-error-face
+  '((t (:inherit error)))
+  "Face for highlighting errors in grammar check."
+  :group 'reverso)
+
 (defconst reverso--languages
   '((translation . (arabic chinese dutch english french german hebrew
                            italian japanese korean polish portugese
@@ -224,9 +229,13 @@ that are in tags with `reverso-highlight-face'"
        (libxml-parse-html-region (point-min) (point-max))
        'body)))))
 
+(defun reverso--alist-remove-empty-values (alist)
+  (cl-loop for (key . value) in alist
+           if value
+           collect (cons key value)))
+
 (defun reverso--translate-parse (response)
   "Convert RESPONSE from the reverso translation API into an alist."
-  (setq my/test2 response)
   (let ((corrected-text (alist-get 'correctedText response))
         (language-from (alist-get 'from response))
         (language-to (alist-get 'to response))
@@ -282,7 +291,8 @@ that is called with the result."
     :encoding 'utf-8
     :success (cl-function
               (lambda (&key data &allow-other-keys)
-                (funcall cb (reverso--get-context-parse data))))
+                (funcall cb (reverso--alist-remove-empty-values
+                             (reverso--get-context-parse data)))))
     :error (cl-function
             (lambda (&key error-thrown &allow-other-keys)
               (message "Error!: %S" error-thrown)))))
@@ -320,7 +330,8 @@ CB is a function that is called with the result."
     :encoding 'utf-8
     :success (cl-function
               (lambda (&key data &allow-other-keys)
-                (funcall cb (reverso--get-synomyms-parse data))))
+                (funcall cb (reverso--alist-remove-empty-values
+                             (reverso--get-synomyms-parse data)))))
     :error (cl-function
             (lambda (&key error-thrown &allow-other-keys)
               (message "Error!: %S" error-thrown)))))
@@ -366,8 +377,57 @@ HTML is a string."
             collect
             `((antonym . ,text))))))))
 
-;; (reverso--get-synomyms "Color" 'english (lambda (data) (setq my/test2 data)))
+(defun reverso--get-grammar (text language cb)
+  (unless (member language (alist-get 'grammar reverso--languages))
+    (error "Wrong language: %s" language))
+  (request (concat (alist-get 'grammar reverso--urls)
+                   "?text=" (url-hexify-string text)
+                   "&language=" (symbol-name
+                                 (alist-get language reverso--language-mapping))
+                   "&getCorrectionDetails=true")
+    :type "GET"
+    :headers `(("Accept" . "*/*")
+               ("Connection" . "keep-alive")
+               ("User-Agent" . ,reverso--user-agent))
+    :parser 'json-read
+    :encoding 'utf-8
+    :success (cl-function
+              (lambda (&key data &allow-other-keys)
+                (funcall cb (reverso--alist-remove-empty-values
+                             (reverso--get-grammar-parse text data)))))
+    :error (cl-function
+            (lambda (&key error-thrown &allow-other-keys)
+              (message "Error!: %S" error-thrown)))))
 
+(defun reverso--get-grammar-parse (source-text data)
+  (let* ((corrected-text (alist-get 'text data))
+         (source-text-hl
+          (with-temp-buffer
+            (insert source-text)
+            (cl-loop for corr across (alist-get 'corrections data)
+                     if (alist-get 'startIndex corr)
+                     do (put-text-property (alist-get 'startIndex corr)
+                                           (alist-get 'endIndex corr)
+                                           'face 'reverso-error-face))
+            (buffer-string)))
+         (corrections
+          (cl-loop
+           for corr across (alist-get 'corrections data)
+           collect `((type . ,(alist-get 'type corr))
+                     (short-description . ,(alist-get 'shortDescription corr))
+                     (long-description . ,(alist-get 'longDescription corr))
+                     (mistake-text . ,(alist-get 'mistakeText corr))
+                     (correction-text . ,(alist-get 'correctionText corr))
+                     (correction-defition . ,(alist-get 'correctionDefinition corr))
+                     (suggestions
+                      . ,(cl-loop for s across (alist-get 'suggestions corr)
+                                  collect
+                                  `((text . ,(alist-get 'text s))
+                                    (definition . ,(alist-get 'definition s))
+                                    (category . ,(alist-get 'category s)))))))))
+    `((corrected-text . ,corrected-text)
+      (source-text . ,source-text-hl)
+      (corrections . ,corrections))))
 
 (provide 'reverso)
 ;;; reverso.el ends here
