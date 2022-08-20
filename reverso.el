@@ -46,24 +46,21 @@
   "Face for highlighting errors in grammar check."
   :group 'reverso)
 
-(defconst reverso--languages
-  '((translation . (arabic chinese dutch english french german hebrew
-                           italian japanese korean polish portugese
-                           romanian russian spanish swedish turkish
-                           ukrainian))
-    (context . (arabic german english spanish french hebrew italian
-                       japanese dutch polish portugese romanian
-                       russian swedish turkish ukrainian chinese))
-    (grammar . (english french))
-    (synonyms . (arabic german english spanish french hebrew italian
-                        japanese dutch polish portugese romanian
-                        russian)))
-  "Available languages for diferent operations.")
+(defcustom reverso-max-display-lines-in-input 5
+  "Maximum number of lines to display in input."
+  :type 'integer
+  :group 'reverso)
+
+(defcustom reverso-language-completing-read-threshold 4
+  "Minimum number of languages to choose with `completing-read'."
+  :type 'integer
+  :group 'reverso)
 
 (defconst reverso--language-mapping
-  '((arabic . ara)
+  '((english . eng)
     (german . ger)
     (spanish . spa)
+    (arabic . ara)
     (french . fra)
     (hebrew . heb)
     (italian . ita)
@@ -75,16 +72,15 @@
     (russian . rus)
     (ukrainian . ukr)
     (turkish . tur)
-    (chinese . chi)
-    (english . eng))
+    (chinese . chi))
   "Mapping from long language names to short ones.
 
 This one is used for the translation queries.")
 
 (defconst reverso--language-mapping-1
-  '((arabic . ar)
+  '((english . en)
     (german . de)
-    (english . en)
+    (arabic . ar)
     (french . fr)
     (spanish . es)
     (french . fr)
@@ -99,6 +95,26 @@ This one is used for the translation queries.")
   "Mapping from long language names to short ones.
 
 This one is used for the synonyms queries.")
+
+(defcustom reverso-languages (mapcar #'car reverso--language-mapping)
+  "Subset of languages to use."
+  :type `(set ,@(cl-loop for cell in reverso--language-mapping
+                         collect (list 'const (car cell)))))
+
+(defconst reverso--languages
+  '((translation . (arabic chinese dutch english french german hebrew
+                           italian japanese korean polish portugese
+                           romanian russian spanish swedish turkish
+                           ukrainian))
+    (context . (arabic german english spanish french hebrew italian
+                       japanese dutch polish portugese romanian
+                       russian swedish turkish ukrainian chinese))
+    (grammar . (english french))
+    (synonyms . (arabic german english spanish french hebrew italian
+                        japanese dutch polish portugese romanian
+                        russian)))
+  "Available languages for diferent operations.")
+
 
 (defconst reverso--languages-compatible
   `((context
@@ -428,6 +444,184 @@ HTML is a string."
     `((corrected-text . ,corrected-text)
       (source-text . ,source-text-hl)
       (corrections . ,corrections))))
+
+(defclass reverso--transient-input (transient-infix)
+  ((format :initform " %k %d: %v"))
+  "Class used for retrieving the input string.")
+
+(cl-defmethod transient-init-value ((obj reverso--transient-input))
+  (oset obj value
+        (cond
+         ((and (slot-boundp obj 'value) (oref obj value))
+          (oref obj value))
+         ((region-active-p)
+          (buffer-substring-no-properties (region-beginning) (region-end)))
+         ((equal current-prefix-arg '(4))
+          (buffer-substring-no-properties (point-min) (point-max)))
+         (t ""))))
+
+(cl-defmethod transient-infix-read ((obj reverso--transient-input))
+  (read-from-minibuffer "Input: " (oref obj value)))
+
+(cl-defmethod transient-format-value ((obj reverso--transient-input))
+  (propertize
+   (with-temp-buffer
+     (insert (oref obj value))
+     (goto-char (point-min))
+     (let ((lines (count-lines (point-min) (point-max))))
+       (cond
+        ((= (buffer-size) 0) "(empty)")
+        ((= lines 1) (buffer-string))
+        ((> lines reverso-max-display-lines-in-input)
+         (concat
+          "\n"
+          (buffer-substring
+           (point-min)
+           (save-excursion
+             (goto-char (point-min))
+             (forward-line (1- reverso-max-display-lines-in-input))
+             (point)))
+          "\n... (truncated "
+          (number-to-string
+           (- lines reverso-max-display-lines-in-input))
+          " more lines)"))
+        (t (concat "\n" (buffer-string))))))
+   'face 'transient-value))
+
+(defclass reverso--transient-language (transient-infix)
+  ((format :initform " %k %d %v")
+   (languages :initarg :languages :initform nil)
+   (is-target :initarg :is-target :initform nil))
+  "Class used for switching the language.")
+
+(defvar reverso--source-value nil)
+
+(defvar reverso--target-value nil)
+
+(defun reverso--get-available-languages (obj &optional is-target)
+  (let* ((all-languages
+          (seq-sort
+           (lambda (a b) (string-lessp (symbol-name a)
+                                       (symbol-name b)))
+           (or (oref obj languages)
+               (mapcar #'car reverso--language-mapping))))
+         (source-language (when is-target
+                            (or reverso--source-value
+                                (car all-languages))))
+         (languages (cl-loop for lang in all-languages
+                             if (or (not source-language)
+                                    (not (eq source-language lang)))
+                             collect lang)))
+    (seq-sort
+     (lambda (a b) (string-lessp (symbol-name a)
+                                 (symbol-name b)))
+     (seq-intersection languages reverso-languages))))
+
+(defun reverso--get-language-variable (obj)
+  (if (oref obj is-target)
+      'reverso--target-value
+    'reverso--source-value))
+
+(cl-defmethod transient-init-value ((obj reverso--transient-language))
+  (let ((value
+         (cond
+          ((and (slot-boundp obj 'value) (oref obj value))
+           (oref obj value))
+          ((and (symbol-value (reverso--get-language-variable obj)))
+           (symbol-value (reverso--get-language-variable obj)))
+          (t (car (reverso--get-available-languages
+                   obj (oref obj is-target)))))))
+    (set (reverso--get-language-variable obj) value)
+    (oset obj value value)))
+
+(cl-defmethod transient-format-value ((obj reverso--transient-language))
+  (let ((value (transient-infix-value obj)))
+    (concat
+     (propertize "[" 'face 'transient-inactive-value)
+     (mapconcat
+      (lambda (choice)
+        (propertize (symbol-name choice) 'face
+                    (if (eq choice value)
+                        'transient-value
+                      'transient-inactive-value)))
+      (reverso--get-available-languages obj (oref obj is-target))
+      (propertize "|" 'face 'transient-inactive-value))
+     (propertize "]" 'face 'transient-inactive-value))))
+
+(cl-defmethod transient-infix-read ((obj reverso--transient-language))
+  (let* ((choices (reverso--get-available-languages obj (oref obj is-target)))
+         (current-idx (or (cl-position (oref obj value) choices) -1))
+         (next-idx (% (1+ current-idx) (length choices)))
+         (next-choice
+          (if (> (length choices) reverso-language-completing-read-threshold)
+              (let ((lang (intern
+                           (completing-read
+                            "Language: "
+                            (mapcar #'symbol-name choices) nil t))))
+                (unless (member lang choices)
+                  (user-error "Bad language: %s" lang))
+                lang)
+            (nth next-idx choices))))
+    (set (reverso--get-language-variable obj) next-choice)
+    next-choice))
+
+(cl-defmethod transient-infix-value ((obj reverso--transient-language))
+  (let* ((choices (reverso--get-available-languages obj (oref obj is-target)))
+         (current-idx (or (cl-position (oref obj value) choices) -1)))
+    (nth current-idx choices)))
+
+(transient-define-infix reverso--input ()
+  :class 'reverso--transient-input
+  :description "Input")
+
+(transient-define-infix reverso--translate-source ()
+  :class 'reverso--transient-language
+  :description "Source language"
+  :key "s"
+  ;; XXX not sure why `:argument' is necessary :(
+  :argument "-s"
+  :languages (alist-get 'translation reverso--languages))
+
+(transient-define-infix reverso--translate-target ()
+  :class 'reverso--transient-language
+  :description "Target language"
+  :key "t"
+  :argument "-t"
+  :languages (alist-get 'translation reverso--languages)
+  :is-target t)
+
+(transient-define-suffix reverso--swap-languages ()
+  :transient t
+  :key "S"
+  :description "Swap languages"
+  (interactive)
+  (let* ((suffixes (transient-suffixes transient-current-command))
+         (source (seq-find (lambda (suffix)
+                             (and (reverso--transient-language-p suffix)
+                                  (not (oref suffix is-target))))
+                           suffixes))
+         (target (seq-find (lambda (suffix)
+                             (and (reverso--transient-language-p suffix)
+                                  (oref suffix is-target)))
+                           suffixes))
+         (source-value (transient-infix-value source))
+         (target-value (transient-infix-value target)))
+    (oset source value target-value)
+    (oset target value source-value)
+    (setq reverso--source-value target-value)
+    (setq reverso--target-value source-value)))
+
+(transient-define-prefix reverso-translate ()
+  ["Input"
+   ("i" "Input" reverso--input)]
+  ["Parameters"
+   (reverso--translate-source)
+   (reverso--translate-target)
+   (reverso--swap-languages)]
+  ["Actions"
+   ("t" "Test" (lambda () (interactive)
+                 (setq my/test (transient-args transient-current-command))))
+   ("q" "Quit" transient-quit-one)])
 
 (provide 'reverso)
 ;;; reverso.el ends here
