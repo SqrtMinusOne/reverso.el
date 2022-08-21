@@ -134,38 +134,40 @@ This one is used for the synonyms queries.")
 
 (defconst reverso--languages-compatible
   `((context
-     . ((english . (arabic german spanish french hebrew italian
-                           japanese dutch polish portuguese romanian
-                           russian turkish chinese))
-        (arabic . (english german spanish french hebrew italian
-                           portuguese russian turkish))
+     . ((arabic . (english german spanish french hebrew italian
+                           portuguese russian turkish ukrainian))
         (german . (arabic english spanish french hebrew italian
                           japanese dutch polish portuguese romanian
-                          russian turkish))
+                          russian swedish turkish ukrainian))
+        (english . (arabic german spanish french hebrew italian
+                           japanese dutch polish portuguese romanian
+                           russian swedish turkish ukraninan chinese))
         (spanish . (arabic german english french hebrew italian
                            japanese dutch polish portuguese romanian
-                           russian turkish chinese))
+                           russian swedish turkish chinese ukrainian))
         (french . (arabic german spanish english hebrew italian
                           japanese dutch polish portuguese romanian
-                          russian turkish chinese))
-        (hebrew . (arabic german spanish french english italian dutch
-                          portuguese russian))
-        (italian . (arabic german spanish french hebrew english
+                          russian swedish turkish chinese ukrainian))
+        (hebrew . (arabic german english spanish french italian dutch
+                          portuguese russian ukrainian))
+        (italian . (arabic german english spanish french hebrew
                            japanese dutch polish portuguese romanian
-                           russian turkish chinese))
-        (japanese . (german spanish french italian english portuguese
-                            russian))
-        (dutch . (german spanish french hebrew italian english
-                         portuguese russian))
-        (polish . (german spanish french italian english))
-        (portuguese . (arabic german spanish french hebrew italian
-                              japanese dutch english russian turkish))
-        (romanian . (german spanish french italian english turkish))
-        (russian . (arabic german spanish french hebrew italian
-                           japanese dutch portuguese english))
-        (turkish . (arabic german spanish french italian portuguese
-                           romanian english))
-        (chinese . (english french spanish))))
+                           russian swedish turkish ukrainian))
+        (japanese . (german english spanish french italian portuguese
+                            russian ukrainian))
+        (dutch . (german english spanish french hebrew italian
+                         portuguese russian ukrainian))
+        (polish . (german english spanish french italian ukrainian))
+        (portuguese . (arabic german english spanish french hebrew italian
+                              japanese dutch russian turkish ukrainian))
+        (romanian . (german english spanish french italian turkish ukrainian))
+        (russian . (arabic german english spanish french hebrew italian
+                           japanese dutch portuguese ukrainian))
+        (swedish . (german english spanish french italian ukrainian))
+        (turkish . (arabic german english spanish french italian
+                           portuguese romanian ukrainian))
+        (ukrainian . (english))
+        (chinese . (english french spanish ukrainian))))
     (translation
      . ((arabic . (german english spanish french hebrew italian
                           portuguese russian turkish))
@@ -283,6 +285,10 @@ The result is an alist with the following keys:
                (member source
                        (alist-get 'translation reverso--languages)))
     (error "Wrong language: %s" target))
+  (unless (member target
+                  (alist-get source
+                             (alist-get 'translation reverso--languages-compatible)))
+    (error "Language %s is not compatible with %s" target source))
   (request (alist-get 'translation reverso--urls)
     :type "POST"
     :data (json-encode
@@ -387,15 +393,19 @@ that are in tags with `reverso-highlight-face'"
 (defun reverso--get-context (text source target cb)
   "Do a context translation for TEXT from SOURCE to TARGET.
 
-SOURCE and TARGET are keys of `reverso--languages'.  CB is a function
-that is called with the result."
+SOURCE and TARGET are keys of `reverso--languages'.  CB is called with
+the result.
+
+The result is a list of alists with the keys:
+- `:source': string in the source language
+- `:target': string in the target language"
   (unless (and (alist-get source reverso--language-mapping)
                (member source
-                       (alist-get 'translation reverso--languages)))
+                       (alist-get 'context reverso--languages)))
     (error "Wrong language: %s" source))
   (unless (and (alist-get target reverso--language-mapping)
                (member source
-                       (alist-get 'translation reverso--languages)))
+                       (alist-get 'context reverso--languages)))
     (error "Wrong language: %s" target))
   (unless (member target
                   (alist-get source
@@ -649,9 +659,9 @@ source text."
                    "\n")
                do (reverso--context-render-list
                    (alist-get :context result)
-                   (alist-get :language-from data)
+                   (alist-get :language-to data)
                    (or (alist-get :detected-language data)
-                       (alist-get :language-to data)))))))
+                       (alist-get :language-from data)))))))
 
 (defun reverso--context-render-list (data lang-to lang-from)
   "Render the context results."
@@ -677,6 +687,14 @@ source text."
         (setq-local reverso--output (alist-get :translation data))
         (insert (alist-get :translation data)))
     (insert "No results!")))
+
+(defun reverso--context-render (input data lang-to lang-from)
+  (setq-local reverso--input input)
+  (insert (propertize
+           "Context results: "
+           'face 'reverso-heading-face)
+          "\n")
+  (reverso--context-render-list data lang-to lang-from))
 
 (defmacro reverso--with-buffer (&rest body)
   "Execute BODY in the clean `reverso' results buffer."
@@ -912,8 +930,7 @@ source text."
      (reverso--with-buffer
        (if is-brief
            (reverso--translate-render-brief input data)
-         (reverso--translate-render input data))
-       (setq-local reverso--data data)))))
+         (reverso--translate-render input data))))))
 
 (transient-define-prefix reverso-translate ()
   ["Input"
@@ -925,6 +942,44 @@ source text."
    (reverso--transient-breif-infix)]
   ["Actions"
    (reverso--translate-exec-suffix)
+   ("q" "Quit" transient-quit-one)])
+
+(transient-define-infix reverso--transient-context-language-source ()
+  :class 'reverso--transient-language
+  :description "Source language"
+  :key "s"
+  :argument "-s"
+  :languages (alist-get 'context reverso--languages))
+
+(transient-define-infix reverso--transient-context-language-target ()
+  :class 'reverso--transient-language
+  :description "Target language"
+  :key "t"
+  :argument "-t"
+  :languages (alist-get 'translation reverso--languages)
+  :target-languages (alist-get 'context reverso--languages-compatible)
+  :is-target t)
+
+(transient-define-suffix reverso--context-exec-suffix (input source target)
+  :key "e"
+  :description "Find context"
+  (interactive (transient-args transient-current-command))
+  (reverso--get-context
+   input source target
+   (lambda (data)
+     (reverso--with-buffer
+       (reverso--context-render input data source target)
+       (setq-local reverso--data data)))))
+
+(transient-define-prefix reverso-context ()
+  ["Input"
+   ("i" "Input" reverso--transient-input-infix)]
+  ["Parameters"
+   (reverso--transient-context-language-source)
+   (reverso--transient-context-language-target)
+   (reverso--transient-swap-languages)]
+  ["Actions"
+   (reverso--context-exec-suffix)
    ("q" "Quit" transient-quit-one)])
 
 (provide 'reverso)
