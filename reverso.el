@@ -322,13 +322,13 @@ selected word in the context search.  This function fontifies words
 that are in tags with `reverso-highlight-face'"
   (thread-last
     (mapconcat (lambda (node)
-                 (let ((text (string-trim (if (listp node) (dom-texts node) node)))
+                 (let ((text (if (listp node) (dom-texts node) node))
                        (is-special (listp node)))
                    (if is-special
                        (propertize text 'face 'reverso-highlight-face)
                      text)))
                (dom-children dom)
-               " ")
+               "")
     (string-trim)
     (replace-regexp-in-string
      (rx (+ (syntax whitespace))",") ",")
@@ -352,7 +352,9 @@ that are in tags with `reverso-highlight-face'"
            collect (cons key value)))
 
 (defun reverso--alist-get-inv (alist lookup-value)
-  "Like `alist-get', but with `car' and `cdr' swapped."
+  "Like `alist-get', but with `car' and `cdr' swapped.
+
+ALIST is an alist, LOOKUP-VALUE is a value to look in `cdr'."
   (cl-loop for (key . value) in alist
            if (equal lookup-value value)
            return key))
@@ -448,7 +450,16 @@ DATA is an html string."
 (defun reverso--get-synomyms (text language cb)
   "Get synomyms for TEXT in LANGUAGE.
 
-CB is a function that is called with the result."
+CB is called with the result.
+
+The result is a list of alists with the following keys:
+- `:kind': part of speech
+- `:synonyms': list of alists:
+   - `:synonym': word
+   - `:relevant': if t considered a \"good match\" by the service
+- `:examples': list of strings with examples
+- `:antonyms': list of alists
+   - `:antonym': word"
   (unless (alist-get language reverso--language-mapping-1)
     (error "Wrong language: %s" language))
   (request (concat (alist-get 'synomyms reverso--urls)
@@ -480,25 +491,25 @@ HTML is a string."
                    (dom-by-id (dom-by-tag dom 'body) "synonyms"))
      if (string-match-p "wrap-hold-prop" (or (dom-attr child 'class) ""))
      collect
-     `((kind . ,(string-trim (dom-texts (dom-by-class child "words-options"))))
-       (synonyms
+     `((:kind . ,(string-trim (dom-texts (dom-by-class child "words-options"))))
+       (:synonyms
         . ,(cl-loop
             for synonym in (dom-non-text-children
                             (dom-by-class (car (dom-by-class child "word-opt"))
                                           "word-box"))
             for a = (car (dom-by-tag synonym 'a))
             collect
-            `((synonym . ,(string-trim (dom-texts synonym)))
-              (relevant
+            `((:synonym . ,(string-trim (dom-texts synonym)))
+              (:relevant
                . ,(and (string-match-p "relevant" (or (dom-attr a 'class) "")) t)))))
-       (examples
+       (:examples
         . ,(cl-loop
             for example in (dom-non-text-children
                             (dom-by-class child "phrases-examples"))
             for span = (car (dom-by-tag example 'span))
             if span
             collect (reverso--convert-string span)))
-       (antonyms
+       (:antonyms
         . ,(cl-loop
             for antonym in (dom-non-text-children
                             (dom-by-class (car (dom-by-class child "antonyms-wrapper"))
@@ -507,7 +518,7 @@ HTML is a string."
             for text = (string-trim (dom-texts antonym))
             unless (string-match-p (rx "...") text)
             collect
-            `((antonym . ,text))))))))
+            `((:antonym . ,text))))))))
 
 (defun reverso--get-grammar (text language cb)
   (unless (member language (alist-get 'grammar reverso--languages))
@@ -664,7 +675,11 @@ source text."
                        (alist-get :language-from data)))))))
 
 (defun reverso--context-render-list (data lang-to lang-from)
-  "Render the context results."
+  "Render a list of context translation results.
+
+DATA is a list of alists with the following keys:
+- `:source': string in the source language (LANG-FROM)
+- `:target': string in the target language (LANG-TO)"
   (cl-loop with lang-to-name = (symbol-name lang-to)
            with lang-from-name = (symbol-name lang-from)
            with lang-length = (max (length lang-to-name) (length lang-from-name))
@@ -681,6 +696,10 @@ source text."
                       target "\n\n")))
 
 (defun reverso--translate-render-brief (text data)
+  "Render the translation results in brief format.
+
+DATA is an alist as defined in `reverso--translate'.  TEXT is the
+source text."
   (setq-local reverso--input text)
   (if (alist-get :translation data)
       (progn
@@ -689,12 +708,57 @@ source text."
     (insert "No results!")))
 
 (defun reverso--context-render (input data lang-to lang-from)
+  "Render context translation results.
+
+INPUT is the input string.  DATA is a list as defined in
+`reverso--get-context'.  LANG-TO and LANG-FROM and the target and
+source languages."
   (setq-local reverso--input input)
   (insert (propertize
            "Context results: "
            'face 'reverso-heading-face)
           "\n")
   (reverso--context-render-list data lang-to lang-from))
+
+(defun reverso--synonyms-render (input data)
+  "Render synonym search results.
+
+INPUT is the input string.  DATA is a list as defined in
+`reverso--get-synomyms'."
+  (setq-local reverso--input input)
+  (setq my/test data)
+  (dolist (datum data)
+    (when (alist-get :kind datum)
+      (insert (propertize
+               "Part of speech: "
+               'face 'reverso-language-face)
+              (alist-get :kind datum)
+              "\n"))
+    (when (alist-get :synonyms datum)
+      (insert (propertize
+               "Synomyms: "
+               'face 'reverso-heading-face)
+              "\n")
+      (dolist (synonym (alist-get :synonyms datum))
+        (when (alist-get :relevant synonym)
+          (insert "- " (alist-get :synonym synonym) "\n")))
+      (insert "\n"))
+    (when (alist-get :examples datum)
+      (insert (propertize
+               "Examples: "
+               'face 'reverso-heading-face)
+              "\n")
+      (dolist (example (alist-get :examples datum))
+        (insert example "\n"))
+      (insert "\n"))
+    (when (alist-get :antonyms datum)
+      (insert (propertize
+               "Antonyms: "
+               'face 'reverso-heading-face)
+              "\n")
+      (dolist (antonym (alist-get :antonyms datum))
+        (insert "- " (alist-get :antonym antonym) "\n"))
+      (insert "\n"))))
 
 (defmacro reverso--with-buffer (&rest body)
   "Execute BODY in the clean `reverso' results buffer."
@@ -980,6 +1044,33 @@ source text."
    (reverso--transient-swap-languages)]
   ["Actions"
    (reverso--context-exec-suffix)
+   ("q" "Quit" transient-quit-one)])
+
+(transient-define-infix reverso--transient-synonyms-language ()
+  :class 'reverso--transient-language
+  :description "Language"
+  :key "s"
+  :argument "-s"
+  :languages (alist-get 'synonyms reverso--languages))
+
+(transient-define-suffix reverso--synonyms-exec-suffix (input source)
+  :key "e"
+  :description "Find synonyms"
+  (interactive (transient-args transient-current-command))
+  (reverso--get-synomyms
+   input source
+   (lambda (data)
+     (reverso--with-buffer
+       (reverso--synonyms-render input data)
+       (setq-local reverso--data data)))))
+
+(transient-define-prefix reverso-synonyms ()
+  ["Input"
+   ("i" "Input" reverso--transient-input-infix)]
+  ["Parameters"
+   (reverso--transient-synonyms-language)]
+  ["Actions"
+   (reverso--synonyms-exec-suffix)
    ("q" "Quit" transient-quit-one)])
 
 (provide 'reverso)
