@@ -590,7 +590,7 @@ SOURCE-TEXT is the text sent for checking.  DATA is the JSON reply."
                      (:correction-text . ,(alist-get 'correctionText corr))
                      (:correction-defition . ,(alist-get 'correctionDefinition corr))
                      (:start-index . ,(alist-get 'startIndex corr))
-                     (:end-index . ,(alist-get 'endIndex corr))
+                     (:end-index . ,(1+ (alist-get 'endIndex corr)))
                      (:suggestions
                       . ,(cl-loop for s across (alist-get 'suggestions corr)
                                   collect
@@ -806,48 +806,55 @@ DATA is an alist as defined in `reverso--get-grammar'."
      (propertize "Corrections: " 'face 'reverso-heading-face)
      "\n")
     (dolist (corr (alist-get :corrections data))
-      (insert
-       (propertize (or (alist-get :type corr) "")
-                   'face 'reverso-keyword-face))
-      (when (alist-get :short-description corr)
-        (insert ": " (alist-get :short-description corr)))
-      (insert "\n")
-      (when (alist-get :long-description corr)
-        (insert (alist-get :long-description corr))
-        (insert "\n"))
-      (insert "\n")
-      (insert
-       (propertize
-        (or (alist-get :mistake-text corr) "")
-        'face 'reverso-highlight-face)
-       " -> "
-       (propertize
-        (or (alist-get :correction-text corr) "")
-        'face 'reverso-highlight-face))
-      (when (alist-get :correction-defition corr)
-        (insert " [" (propertize
-                      (alist-get :correction-defition corr)
-                      'face 'reverso-definition-face)
-                "]"))
-      (insert "\n\n")
-      (when (alist-get :suggestions corr)
-        (insert "Suggestions:\n")
-        (dolist (sg (alist-get :suggestions corr))
-          (insert "- ")
-          (when (alist-get :category sg)
-            (insert (alist-get :category sg) ": "))
-          (insert (propertize
-                   (alist-get :text sg)
-                   'face 'reverso-highlight-face))
-          (when (alist-get :definition sg)
-            (insert
-             " ["
-             (propertize
-              (alist-get :definition sg)
-              'face 'reverso-definition-face)
-             "]"))
-          (insert "\n"))
-        (insert "\n")))))
+      (reverso--grammar-render-error corr))))
+
+(defun reverso--grammar-render-error (corr)
+  "Render one error of grammar checking results.
+
+CORR is one element of the `:corrections' list, as defined in
+`reverso--get-grammar'."
+  (insert
+   (propertize (or (alist-get :type corr) "")
+               'face 'reverso-keyword-face))
+  (when (alist-get :short-description corr)
+    (insert ": " (alist-get :short-description corr)))
+  (insert "\n")
+  (when (alist-get :long-description corr)
+    (insert (alist-get :long-description corr))
+    (insert "\n"))
+  (insert "\n")
+  (insert
+   (propertize
+    (or (alist-get :mistake-text corr) "")
+    'face 'reverso-highlight-face)
+   " -> "
+   (propertize
+    (or (alist-get :correction-text corr) "")
+    'face 'reverso-highlight-face))
+  (when (alist-get :correction-defition corr)
+    (insert " [" (propertize
+                  (alist-get :correction-defition corr)
+                  'face 'reverso-definition-face)
+            "]"))
+  (insert "\n\n")
+  (when (alist-get :suggestions corr)
+    (insert "Suggestions:\n")
+    (dolist (sg (alist-get :suggestions corr))
+      (insert "- ")
+      (when (alist-get :category sg)
+        (insert (alist-get :category sg) ": "))
+      (insert (propertize
+               (alist-get :text sg)
+               'face 'reverso-highlight-face))
+      (when (alist-get :definition sg)
+        (insert
+         " ["
+         (propertize
+          (alist-get :definition sg)
+          'face 'reverso-definition-face)
+         "]"))
+      (insert "\n"))
+    (insert "\n")))
 
 (defmacro reverso--with-buffer (&rest body)
   "Execute BODY in the clean `reverso' results buffer."
@@ -863,6 +870,140 @@ DATA is an alist as defined in `reverso--get-grammar'."
            ,@body)
          (goto-char (point-min)))
        (switch-to-buffer-other-window buffer))))
+
+;;; In-buffer correction
+(defun reverso-check-clear (&optional region-start region-end)
+  "Remove reverso grammar check overlays.
+
+If run when a region is active, remove overlays only in that region.
+
+REGION-START and REGION-END are borders of the region."
+  (interactive (if (use-region-p)
+                   (list (region-beginning) (region-end))
+                 (list (point-min) (point-max))))
+  (dolist (ov (overlays-in region-start region-end))
+    (when (overlay-get ov 'reverso-correction)
+      (delete-overlay ov))))
+
+(defun reverso--check-make-overlays (region-start region-end data)
+  "Put reverso grammar check overlays into region.
+
+REGION-START and REGION-END and borders of the region.  DATA is an
+alist as defined in `reverso--get-grammar'."
+  (reverso-check-clear region-start region-end)
+  (dolist (corr (alist-get :corrections data))
+    (let* ((start (+ region-start (alist-get :start-index corr)))
+           (end (+ region-start (alist-get :end-index corr)))
+           (ov (make-overlay start end)))
+      (overlay-put ov 'reverso-correction corr)
+      (overlay-put ov 'priority 1)
+      (overlay-put ov 'help-echo
+                   (concat
+                    (alist-get :type corr)
+                    ". " (alist-get :short-description corr)
+                    (when (alist-get :long-description corr)
+                      (concat ". " (alist-get :long-description corr)))))
+      (overlay-put ov 'face 'reverso-error-face))))
+
+(defun reverso-check-next-error ()
+  "Jump to next reverso grammar check error."
+  (interactive)
+  (let ((ov (cl-loop with point = (1+ (point))
+                     with point-max = (point-max)
+                     with ov = nil
+                     while (and (not (= point point-max))
+                                (not ov))
+                     do (setq ov
+                              (cl-loop for ov-cand in (overlays-at point)
+                                       if (and (overlay-get ov-cand 'reverso-correction)
+                                               (= point (overlay-start ov-cand)))
+                                       return ov-cand)
+                              point (next-overlay-change point))
+                     if ov return ov)))
+    (if ov
+        (goto-char (overlay-start ov))
+      (message "No errors left!"))))
+
+(defun reverso-check-prev-error ()
+  "Jump to previous reverso grammar check error."
+  (interactive)
+  (let ((ov (cl-loop with point = (1- (point))
+                     with point-min = (point-min)
+                     with ov = nil
+                     while (and (not (= point point-min))
+                                (not ov))
+                     do (setq ov
+                              (cl-loop for ov-cand in (overlays-at point)
+                                       if (and (overlay-get ov-cand 'reverso-correction)
+                                               (= point (overlay-start ov-cand)))
+                                       return ov-cand)
+                              point (previous-overlay-change point))
+                     if ov return ov)))
+    (if ov
+        (goto-char (overlay-start ov))
+      (message "No errors left!"))))
+
+(defun reverso--get-error-at-point ()
+  "Return overlay reverso error at point."
+  (cl-loop for ov in (overlays-at (point))
+           if (overlay-get ov 'reverso-correction)
+           return (cons ov (overlay-get ov 'reverso-correction))))
+
+(defun reverso-describe-error-at-point ()
+  "Describe reverso-error at point."
+  (interactive)
+  (let ((err (reverso--get-error-at-point)))
+    (unless err
+      (user-error "No error at point!"))
+    (reverso--with-buffer
+      (reverso--grammar-render-error (cdr ov)))))
+
+(defun reverso-check-fix-at-point ()
+  "Fix reverso error at point."
+  (interactive)
+  (let ((err (reverso--get-error-at-point)))
+    (unless err
+      (user-error "No error at point!"))
+    (let ((correction
+           (completing-read
+            "Fix: "
+            (mapcar
+             (lambda (sugg)
+               (alist-get :text sugg))
+             (alist-get :suggestions (cdr err)))
+            nil t))
+          (start (overlay-start (car err)))
+          (end (overlay-end (car err))))
+      (delete-overlay (car err))
+      (save-excursion
+        (goto-char start)
+        (delete-region start end)
+        (insert correction)))))
+
+(defun reverso-check-buffer (language region-start region-end)
+  "Check for grammar errors in buffer.
+
+If a region is active, restrict the action to that region.
+
+LANGUAGE is a language from the `reverso--languages' list.
+REGION-START and REGION-END are borders of the region."
+  (interactive (append
+                (list (intern
+                       (completing-read
+                        "Language: "
+                        (seq-intersection
+                         reverso-languages
+                         (alist-get 'grammar reverso--languages))
+                        nil t)))
+                (if (use-region-p)
+                    (list (region-beginning) (region-end))
+                  (list (point-min) (point-max)))))
+  (reverso--get-grammar
+   (buffer-substring-no-properties region-start region-end)
+   language
+   (lambda (data)
+     (reverso--check-make-overlays region-start region-end data)
+     (message "Check complete!"))))
 
 ;;; Transient
 
