@@ -1328,7 +1328,7 @@ OBJ is an instance of `reverso--transient-brief'."
            (reverso--translate-render-brief input data)
          (reverso--translate-render input data))))))
 
-;;;###autoload
+;;;###autoload (autoload 'reverso-translate "reverso" nil t)
 (transient-define-prefix reverso-translate ()
   "Translate text.
 
@@ -1378,7 +1378,7 @@ input."
        (reverso--context-render input data source target)
        (setq-local reverso--data data)))))
 
-;;;###autoload
+;;;###autoload (autoload 'reverso-context "reverso" nil t)
 (transient-define-prefix reverso-context ()
   "Find bilingual concordances for text.
 
@@ -1413,7 +1413,7 @@ inputs."
        (reverso--synonyms-render input data)
        (setq-local reverso--data data)))))
 
-;;;###autoload
+;;;###autoload (autoload 'reverso-synomyms "reverso" nil t)
 (transient-define-prefix reverso-synonyms ()
   "Find synomyms."
   ["Input"
@@ -1442,7 +1442,7 @@ inputs."
        (reverso--grammar-render data)
        (setq-local reverso--data data)))))
 
-;;;###autoload
+;;;###autoload (autoload 'reverso-grammar "reverso" nil t)
 (transient-define-prefix reverso-grammar ()
   "Check grammar."
   ["Input"
@@ -1510,7 +1510,7 @@ The class doesn't actually have any value, but this is necessary for transient."
   :key "l"
   :argument "--remove-line-breaks")
 
-;;;###autoload
+;;;###autoload (autoload 'reverso-grammar-buffer "reverso" nil t)
 (transient-define-prefix reverso-grammar-buffer ()
   "Check grammar current in buffer.
 
@@ -1537,7 +1537,7 @@ region.  Otherwise, use the entire buffer."
   (setq reverso--current-grammar-check-buffer (current-buffer))
   (transient-setup 'reverso-grammar-buffer))
 
-;;;###autoload
+;;;###autoload (autoload 'reverso "reverso" nil t)
 (transient-define-prefix reverso ()
   "Reverso translation service.
 
