@@ -518,7 +518,6 @@ HTML is a string."
             for antonym in (dom-non-text-children
                             (dom-by-class (car (dom-by-class child "antonyms-wrapper"))
                                           "word-box"))
-            for a = (car (dom-by-tag antonym 'a))
             for text = (string-trim (dom-texts antonym))
             unless (string-match-p (rx "...") text)
             collect
@@ -756,7 +755,6 @@ source languages."
 INPUT is the input string.  DATA is a list as defined in
 `reverso--get-synomyms'."
   (setq-local reverso--input input)
-  (setq my/test data)
   (dolist (datum data)
     (when (alist-get :kind datum)
       (insert (propertize
@@ -1010,10 +1008,7 @@ OBJ is an instance of `reverso--transient-language'."
            (oref obj value))
           ((and (symbol-value (reverso--get-language-variable obj)))
            (symbol-value (reverso--get-language-variable obj)))
-          (t (car (reverso--get-available-languages
-                   obj
-                   (oref obj target-languages)
-                   (oref obj is-target)))))))
+          (t (car (reverso--get-available-languages obj))))))
     (set (reverso--get-language-variable obj) value)
     (oset obj value value)))
 
