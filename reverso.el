@@ -998,6 +998,16 @@ alist as defined in `reverso--get-grammar'."
            if (overlay-get ov 'reverso-correction)
            return (cons ov (overlay-get ov 'reverso-correction))))
 
+(defun reverso-check-ignore-error ()
+  "Remove error at point."
+  (interactive)
+  (let ((err (reverso--get-error-at-point)))
+    (unless err
+      (user-error "No error at point!"))
+    (delete-overlay (car err))
+    (when transient-current-command
+      (reverso-check-next-error))))
+
 (defun reverso-describe-error-at-point ()
   "Describe reverso-error at point."
   (interactive)
@@ -1013,6 +1023,8 @@ alist as defined in `reverso--get-grammar'."
   (let ((err (reverso--get-error-at-point)))
     (unless err
       (user-error "No error at point!"))
+    (unless (alist-get :suggestions (cdr err))
+      (user-error "No suggestions!"))
     (let ((correction
            (completing-read
             "Fix: "
@@ -1035,7 +1047,7 @@ alist as defined in `reverso--get-grammar'."
 If a region is active, restrict the action to that region.
 
 LANGUAGE is a language from the `reverso--languages' list.
-REGION-START and REGION-END are borders of the region.
+REGION-START and REGION-END are the borders of the region.
 
 If STRING-JOIN is non-nil, remove linebreaks from the string."
   (interactive (append
@@ -1068,7 +1080,7 @@ If STRING-JOIN is non-nil, remove linebreaks from the string."
   "Whether to use the current buffer as input.
 
 That parameter is normally set by the prefix argument, but as it
-doesn't pesist between parent and child invocations, this variable is
+doesn't persist between parent and child invocations, this variable is
 used instead.")
 
 (cl-defmethod transient-init-value ((obj reverso--transient-input))
@@ -1524,6 +1536,7 @@ region.  Otherwise, use the entire buffer."
   ["Errors"
    :class transient-row
    ("f" "Fix error" reverso--check-fix-at-point-transient)
+   ("i" "Ignore error" reverso-check-ignore-error :transient t)
    ("p" "Previous error" reverso-check-prev-error :transient t)
    ("P" "First error" reverso-check-first-error :transient t)
    ("n" "Next error" reverso-check-next-error :transient t)
