@@ -25,7 +25,29 @@
 
 ;;; Commentary:
 
-;; TODO
+;; Emacs client for the https://reverso.net service.  The service
+;; doesn't offer an official API, so this package accesses it with
+;; whatever means possible.
+;;
+;; The implemented features are as follows:
+;; - Translation (run `reverso-translate')
+;; - Bilingual concordances or "context" (run `reverso-context')
+;; - Grammar check (run `reverso-grammar')
+;; - Synonyms search (run `reverso-synonyms')
+;; There's also `reverso-grammar-buffer', which does grammar check in
+;; the current buffer and displays the result with overlays.
+;;
+;; The `reverso' command provides an entrypoint to all the
+;; functionality.
+;;
+;; The Elisp API of the listed features is as follows:
+;; - `reverso--translate'
+;; - `reverso--get-context'
+;; - `reverso--get-grammar'
+;; - `reverso--get-context'
+;;
+;; Also check out the README file at
+;; <https://github.com/SqrtMinusOne/reverso.el>
 
 ;;; Code:
 (require 'request)
@@ -953,7 +975,7 @@ alist as defined in `reverso--get-grammar'."
      (if (reverso--get-error-at-point)
          (point)
        (reverso-check-next-error)
-       (if (not (= (point) (point-min)))
+       (if (not (bobp))
            (point)
          (user-error "No errors left!"))))))
 
@@ -966,7 +988,7 @@ alist as defined in `reverso--get-grammar'."
      (if (reverso--get-error-at-point)
          (point)
        (reverso-check-prev-error)
-       (if (not (= (point) (point-max)))
+       (if (not (eobp))
            (point)
          (user-error "No errors left!"))))))
 
@@ -983,7 +1005,7 @@ alist as defined in `reverso--get-grammar'."
     (unless err
       (user-error "No error at point!"))
     (reverso--with-buffer
-      (reverso--grammar-render-error (cdr ov)))))
+      (reverso--grammar-render-error (cdr err)))))
 
 (defun reverso-check-fix-at-point ()
   "Fix reverso error at point."
@@ -1007,13 +1029,15 @@ alist as defined in `reverso--get-grammar'."
         (delete-region start end)
         (insert correction)))))
 
-(defun reverso-check-buffer (language region-start region-end)
+(defun reverso-check-buffer (language region-start region-end &optional string-join)
   "Check for grammar errors in buffer.
 
 If a region is active, restrict the action to that region.
 
 LANGUAGE is a language from the `reverso--languages' list.
-REGION-START and REGION-END are borders of the region."
+REGION-START and REGION-END are borders of the region.
+
+If STRING-JOIN is non-nil, remove linebreaks from the string."
   (interactive (append
                 (list (intern
                        (completing-read
@@ -1025,12 +1049,14 @@ REGION-START and REGION-END are borders of the region."
                 (if (use-region-p)
                     (list (region-beginning) (region-end))
                   (list (point-min) (point-max)))))
-  (reverso--get-grammar
-   (buffer-substring-no-properties region-start region-end)
-   language
-   (lambda (data)
-     (reverso--check-make-overlays region-start region-end data)
-     (message "Check complete!"))))
+  (let ((string (buffer-substring-no-properties region-start region-end)))
+    (when string-join
+      (setq string (replace-regexp-in-string "\n" " " string)))
+    (reverso--get-grammar
+     string language
+     (lambda (data)
+       (reverso--check-make-overlays region-start region-end data)
+       (message "Check complete!")))))
 
 ;;; Transient
 
@@ -1283,7 +1309,7 @@ OBJ is an instance of `reverso--transient-brief'."
     (setq reverso--source-value target-value)
     (setq reverso--target-value source-value)))
 
-(transient-define-infix reverso--transient-breif-infix ()
+(transient-define-infix reverso--transient-brief-infix ()
   :transient t
   :class 'reverso--transient-brief
   :key "b"
@@ -1303,14 +1329,23 @@ OBJ is an instance of `reverso--transient-brief'."
          (reverso--translate-render input data))))))
 
 (transient-define-prefix reverso-translate ()
-  "Translate text."
+  "Translate text.
+
+In normal buffers, if launched with a region selected, use that
+region.  Otherwise, if launched with \\[universal-argument], use the
+current buffer as input.
+
+In launched in a `reverso-result-mode' buffer, use the current input
+string as input.  If launched there with \\[universal-argument] and
+the reverso buffer has an output string, use that output string as
+input."
   ["Input"
    ("i" "Input" reverso--transient-input-infix)]
   ["Parameters"
    (reverso--transient-translate-language-source)
    (reverso--transient-translate-language-target)
    (reverso--transient-swap-languages)
-   (reverso--transient-breif-infix)]
+   (reverso--transient-brief-infix)]
   ["Actions"
    (reverso--translate-exec-suffix)
    ("q" "Quit" transient-quit-one)])
@@ -1346,7 +1381,8 @@ OBJ is an instance of `reverso--transient-brief'."
   "Find bilingual concordances for text.
 
 A bilingual concordance is a pair of strings of the same text in
-different languages."
+different languages.  This works well for a comparatively short
+inputs."
   ["Input"
    ("i" "Input" reverso--transient-input-infix)]
   ["Parameters"
@@ -1443,15 +1479,16 @@ The class doesn't actually have any value, but this is necessary for transient."
   :key "~~1")
 
 (transient-define-suffix reverso--grammar-buffer-exec-suffix
-  (language region-start region-end)
+  (language region-start region-end string-join)
   :key "e"
   :description "Check grammar"
   (interactive (append
-                (transient-args transient-current-command)
+                (list (car (transient-args transient-current-command)))
                 (if (use-region-p)
                     (list (region-beginning) (region-end))
-                  (list (point-min) (point-max)))))
-  (reverso-check-buffer language region-start region-end))
+                  (list (point-min) (point-max)))
+                (list (cadr (transient-args transient-current-command)))))
+  (reverso-check-buffer language region-start region-end string-join))
 
 (defun reverso--check-fix-at-point-transient ()
   "Fix error at point, switch to next error and return to transient."
@@ -1463,12 +1500,22 @@ The class doesn't actually have any value, but this is necessary for transient."
     (error (message "Error: %s" err)))
   (reverso-grammar-buffer))
 
+(transient-define-infix reverso--transient-join-string ()
+  :class 'transient-switch
+  :description "Remove linebreaks"
+  :key "l"
+  :argument "--remove-line-breaks")
+
 (transient-define-prefix reverso-grammar-buffer ()
-  "Check grammar in buffer."
+  "Check grammar current in buffer.
+
+If launched with a region selected, restrict the operation to that
+region.  Otherwise, use the entire buffer."
   ["Information"
    (reverso--transient-current-error-infix)]
   ["Parameters"
-   (reverso--transient-grammar-language)]
+   (reverso--transient-grammar-language)
+   (reverso--transient-join-string)]
   ["Errors"
    :class transient-row
    ("f" "Fix error" reverso--check-fix-at-point-transient)
@@ -1486,7 +1533,14 @@ The class doesn't actually have any value, but this is necessary for transient."
   (transient-setup 'reverso-grammar-buffer))
 
 (transient-define-prefix reverso ()
-  "Translation, grammar checking and bilingual concordances and more."
+  "Reverso translation service.
+
+The following features are implemented as nested transient buffers:
+- `reverso-translate': translation
+- `reverso-context': context (bilingual concordances)
+- `reverso-synonyms': synomyms
+- `reverso-grammar': grammar check
+- `reverso-grammar-buffer': grammar check in buffer"
   ["Commands"
    ("t" "Translation" reverso-translate)
    ("c" "Context" reverso-context)
