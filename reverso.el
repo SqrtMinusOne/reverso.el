@@ -928,20 +928,47 @@ alist as defined in `reverso--get-grammar'."
   "Jump to previous reverso grammar check error."
   (interactive)
   (let ((ov (cl-loop with point = (1- (point))
-                     with point-min = (point-min)
+                     with point-prev = (1+ (point-max))
                      with ov = nil
-                     while (and (not (= point point-min))
+                     while (and (not (= point point-prev))
                                 (not ov))
                      do (setq ov
                               (cl-loop for ov-cand in (overlays-at point)
                                        if (and (overlay-get ov-cand 'reverso-correction)
                                                (= point (overlay-start ov-cand)))
                                        return ov-cand)
+                              point-prev point
                               point (previous-overlay-change point))
                      if ov return ov)))
     (if ov
         (goto-char (overlay-start ov))
       (message "No errors left!"))))
+
+(defun reverso-check-first-error ()
+  "Jump to the first reverso grammar check error."
+  (interactive)
+  (goto-char
+   (save-excursion
+     (goto-char (point-min))
+     (if (reverso--get-error-at-point)
+         (point)
+       (reverso-check-next-error)
+       (if (not (= (point) (point-min)))
+           (point)
+         (user-error "No errors left!"))))))
+
+(defun reverso-check-last-error ()
+  "Jump to the last reverso grammar check error."
+  (interactive)
+  (goto-char
+   (save-excursion
+     (goto-char (point-max))
+     (if (reverso--get-error-at-point)
+         (point)
+       (reverso-check-prev-error)
+       (if (not (= (point) (point-max)))
+           (point)
+         (user-error "No errors left!"))))))
 
 (defun reverso--get-error-at-point ()
   "Return overlay reverso error at point."
@@ -1386,22 +1413,88 @@ different languages."
    (reverso--grammar-exec-suffix)
    ("q" "Quit" transient-quit-one)])
 
+(defclass reverso--transient-curent-error (transient-suffix)
+  ((transient :initform t))
+  "A class to display reverso error point.")
+
+(cl-defmethod transient-init-value ((_ reverso--transient-curent-error))
+  "A dummy method for `reverso--transient-curent-error'.
+
+The class doesn't actually have any value, but this is necessary for transient."
+  nil)
+
+(defvar reverso--current-grammar-check-buffer nil)
+
+(cl-defmethod transient-format ((_ reverso--transient-curent-error))
+  "Format reverso error at point."
+  (when reverso--current-grammar-check-buffer
+    (if-let ((err
+              (with-current-buffer reverso--current-grammar-check-buffer
+                (reverso--get-error-at-point))))
+        (with-temp-buffer
+          (reverso--grammar-render-error (cdr err))
+          (string-trim (buffer-string)))
+      "No error at point")))
+
+(transient-define-infix reverso--transient-current-error-infix ()
+  :class 'reverso--transient-curent-error
+  ;; A dummy key. Seems to be necessary for transient.
+  ;; Just don't press ~ while in the buffer.
+  :key "~~1")
+
+(transient-define-suffix reverso--grammar-buffer-exec-suffix
+  (language region-start region-end)
+  :key "e"
+  :description "Check grammar"
+  (interactive (append
+                (transient-args transient-current-command)
+                (if (use-region-p)
+                    (list (region-beginning) (region-end))
+                  (list (point-min) (point-max)))))
+  (reverso-check-buffer language region-start region-end))
+
+(defun reverso--check-fix-at-point-transient ()
+  "Fix error at point, switch to next error and return to transient."
+  (interactive)
+  (condition-case err
+      (progn
+        (reverso-check-fix-at-point)
+        (reverso-check-next-error))
+    (error (message "Error: %s" err)))
+  (reverso-grammar-buffer))
+
+(transient-define-prefix reverso-grammar-buffer ()
+  "Check grammar in buffer."
+  ["Information"
+   (reverso--transient-current-error-infix)]
+  ["Parameters"
+   (reverso--transient-grammar-language)]
+  ["Errors"
+   :class transient-row
+   ("f" "Fix error" reverso--check-fix-at-point-transient)
+   ("p" "Previous error" reverso-check-prev-error :transient t)
+   ("P" "First error" reverso-check-first-error :transient t)
+   ("n" "Next error" reverso-check-next-error :transient t)
+   ("N" "Last error" reverso-check-last-error :transient t)]
+  ["Actions"
+   :class transient-row
+   ("e" "Check grammar" reverso--grammar-buffer-exec-suffix :transient t)
+   ("c" "Clear" reverso-check-clear :transient t)
+   ("q" "Quit" transient-quit-one)]
+  (interactive)
+  (setq reverso--current-grammar-check-buffer (current-buffer))
+  (transient-setup 'reverso-grammar-buffer))
+
 (transient-define-prefix reverso ()
   "Translation, grammar checking and bilingual concordances and more."
   ["Commands"
    ("t" "Translation" reverso-translate)
    ("c" "Context" reverso-context)
    ("s" "Synomyms" reverso-synonyms)
-   ("g" "Grammar check" reverso-grammar)]
+   ("g" "Grammar check" reverso-grammar)
+   ("b" "Grammar check in buffer" reverso-grammar-buffer)]
   ["Actions"
-   ("q" "Quit" transient-quit-one)
-   ("k" "Kek" (lambda () (interactive)
-                (message "%s"
-                         (cl-mapcan (lambda (obj)
-                                      (when (and (slot-exists-p obj 'scope)
-                                                 (oref obj scope))
-                                        (oref obj scope)))
-                                    (transient-suffixes 'reverso)))))]
+   ("q" "Quit" transient-quit-one)]
   (interactive)
   (setq-local reverso--use-buffer-as-input (equal current-prefix-arg '(4)))
   (transient-setup 'reverso))
