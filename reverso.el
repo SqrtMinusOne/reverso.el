@@ -31,14 +31,13 @@
 ;;
 ;; The implemented features are as follows:
 ;; - Translation (run `reverso-translate')
-;; - Bilingual concordances or "context" (run `reverso-context')
+;; - "Context" or bilingual concordances (run `reverso-context')
 ;; - Grammar check (run `reverso-grammar')
 ;; - Synonyms search (run `reverso-synonyms')
 ;; There's also `reverso-grammar-buffer', which does grammar check in
 ;; the current buffer and displays the result with overlays.
 ;;
-;; The `reverso' command provides an entrypoint to all the
-;; functionality.
+;; The `reverso' command is the entrypoint to all the functionality.
 ;;
 ;; The Elisp API of the listed features is as follows:
 ;; - `reverso--translate'
@@ -55,6 +54,7 @@
 (require 'url-util)
 (require 'dom)
 
+;; XXX Compatibility with evil
 (declare-function evil-define-key* "evil-core")
 
 (defgroup reverso nil
@@ -83,7 +83,7 @@
 
 (defface reverso-definition-face
   '((t (:inherit italic)))
-  "Face for word definitions in reverso buffer."
+  "Face for word definitions in reverso buffers."
   :group 'reverso)
 
 (defcustom reverso-max-display-lines-in-input 5
@@ -96,6 +96,7 @@
   :type 'integer
   :group 'reverso)
 
+;; This mapping is also a source of all available languages
 (defconst reverso--language-mapping
   '((english . eng)
     (german . ger)
@@ -113,7 +114,8 @@
     (ukrainian . ukr)
     (turkish . tur)
     (chinese . chi)
-    (swedish . swe))
+    (swedish . swe)
+    (korean . kor))
   "Mapping from long language names to short ones.
 
 This one is used for the translation queries.")
@@ -168,7 +170,7 @@ This one is used for the synonym queries.")
                           russian swedish turkish ukrainian))
         (english . (arabic german spanish french hebrew italian
                            japanese dutch polish portuguese romanian
-                           russian swedish turkish ukraninan chinese))
+                           russian swedish turkish ukrainian chinese))
         (spanish . (arabic german english french hebrew italian
                            japanese dutch polish portuguese romanian
                            russian swedish turkish chinese ukrainian))
@@ -195,43 +197,16 @@ This one is used for the synonym queries.")
                            portuguese romanian ukrainian))
         (ukrainian . (english))
         (chinese . (english french spanish ukrainian))))
+    ;; They've changed this multiple times while I've been working at
+    ;; the package.  Finally it seems like every language is
+    ;; compatible with every other, at least for the usual
+    ;; translation.
     (translation
-     . ((arabic . (german english spanish french hebrew italian
-                          portuguese russian turkish))
-        (german . (arabic english spanish french hebrew italian
-                          japanese dutch polish portuguese romanian
-                          russian swedish turkish ukrainian))
-        (english . (arabic german spanish french hebrew italian
-                           japanese dutch polish portuguese romanian
-                           russian swedish turkish ukrainian chinese))
-        (spanish . (arabic german english french hebrew italian
-                           japanese dutch polish portuguese romanian
-                           russian swedish turkish chinese ukrainian))
-        (french . (arabic german english spanish hebrew italian
-                          japanese dutch polish portuguese romanian
-                          russian swedish turkish chinese ukrainian))
-        (hebrew . (arabic german english spanish french italian dutch
-                          portuguese russian ukrainian))
-        (italian . (arabic german english spanish french hebrew
-                           japanese dutch polish portuguese romanian
-                           russian swedish turkish ukrainian))
-        (japanese . (german english spanish french italian portuguese
-                            russian ukrainian))
-        (dutch . (german english spanish french hebrew italian
-                         portuguese russian ukrainian))
-        (polish . (german english spanish french italian ukrainian))
-        (portuguese . (arabic german english spanish french hebrew
-                              italian japanese dutch russian turkish
-                              ukrainian))
-        (romanian . (german english spanish french italian turkish
-                            ukrainian))
-        (russian . (arabic german english spanish french hebrew italian
-                           japanese dutch portuguese ukrainian))
-        (swedish . (german english spanish french italian ukrainian))
-        (turkish . (arabic german english spanish french italian
-                           portuguese romanian ukrainian))
-        (ukrainian . (english))
-        (chinese . (english french spanish ukrainian)))))
+     . ,(mapcar
+         (lambda (lang)
+           (cons (car lang)
+                 (mapcar #'car reverso--language-mapping)))
+         reverso--language-mapping)))
   "Compatibility of languages for different operations.")
 
 (defun reverso-verify-settings ()
