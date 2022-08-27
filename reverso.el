@@ -738,11 +738,11 @@ DATA is a list of alists with the following keys:
            for source = (alist-get :source datum)
            for target = (alist-get :target datum)
            do (insert (propertize
-                       (format (format "%%-%ds: " lang-length) lang-to-name)
+                       (format (format "%%-%ds: " lang-length) lang-from-name)
                        'face 'reverso-keyword-face)
                       source "\n"
                       (propertize
-                       (format (format "%%%ds: " lang-length) lang-from-name)
+                       (format (format "%%%ds: " lang-length) lang-to-name)
                        'face 'reverso-keyword-face)
                       target "\n\n")))
 
@@ -799,7 +799,7 @@ INPUT is the input string.  DATA is a list as defined in
                'face 'reverso-heading-face)
               "\n")
       (dolist (example (alist-get :examples datum))
-        (insert example "\n"))
+        (insert "- " example "\n"))
       (insert "\n"))
     (when (alist-get :antonyms datum)
       (insert (propertize
@@ -1240,7 +1240,7 @@ OBJ is an instance of `reverso--transient-language'."
 
 OBJ is an instance of `reverso--transient-language'."
   (let* ((choices (reverso--get-available-languages obj))
-         (current-idx (or (cl-position (oref obj value) choices) -1))
+         (current-idx (or (cl-position (transient-infix-value obj) choices) -1))
          (next-idx (% (1+ current-idx) (length choices)))
          (next-choice
           (if (> (length choices) reverso-language-completing-read-threshold)
