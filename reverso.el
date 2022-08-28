@@ -1479,6 +1479,8 @@ The class doesn't actually have any value, but this is necessary for transient."
                     (list (region-beginning) (region-end))
                   (list (point-min) (point-max)))
                 (list (cadr (transient-args transient-current-command)))))
+  (when (use-region-p)
+    (deactivate-mark))
   (reverso-check-buffer language region-start region-end string-join))
 
 (defun reverso--check-fix-at-point-transient ()
