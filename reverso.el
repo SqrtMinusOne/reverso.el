@@ -1,4 +1,4 @@
-;;; reverso.el --- Translation, grammar checking and bilingual concordances -*- lexical-binding: t -*-
+;;; reverso.el --- Translation, grammar checking, context search -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2022 Korytov Pavel
 
@@ -58,7 +58,7 @@
 (declare-function evil-define-key* "evil-core")
 
 (defgroup reverso nil
-  "Translation, grammar checking and bilingual concordances."
+  "Translation, grammar checking, context search."
   :group 'applications)
 
 (defface reverso-highlight-face
@@ -318,7 +318,7 @@ The result is an alist with the following keys:
 (defun reverso--convert-string (dom)
   "Convert DOM from the reverso API to fontified string.
 
-reverso.net uses tags to highlight relevant works, e.g. <em> for the
+reverso.net uses tags to highlight relevant words, e.g. <em> for the
 selected word in the context search.  This function fontifies words
 that are in tags with `reverso-highlight-face'"
   (thread-last
@@ -337,7 +337,7 @@ that are in tags with `reverso-highlight-face'"
      (rx (+ (syntax whitespace))) " ")))
 
 (defun reverso--convert-string-html (html)
-  "Convert HTML string from the reverso API to fontified string."
+  "Convert an HTML string from the reverso API to fontified string."
   (with-temp-buffer
     (insert "<html><body>" html "<body></html>")
     (reverso--convert-string
@@ -459,7 +459,7 @@ The result is a list of alists with the following keys:
    - `:synonym': word
    - `:relevant': if t, considered a \"good match\" by the service
 - `:examples': list of strings with examples
-- `:antonyms': list of alists
+- `:antonyms': list of alists:
    - `:antonym': word"
   (unless (alist-get language reverso--language-mapping-1)
     (error "Wrong language: %s" language))
@@ -525,7 +525,7 @@ HTML is a string."
 
 CB is called with the result.
 
-The result is an alist with the keys:
+The result is an alist with the following keys:
 `:corrected-text': corrected version of TEXT
 `:source-text-hl': TEXT with highlighted errors
 `:corrections': a list of alists with keys:
@@ -806,7 +806,7 @@ DATA is an alist as defined in `reverso--get-grammar'."
       (reverso--grammar-render-error corr))))
 
 (defun reverso--grammar-render-error (corr)
-  "Render one error of grammar checking results.
+  "Render one error from grammar checking results.
 
 CORR is one element of the `:corrections' list, as defined in
 `reverso--get-grammar'."
@@ -854,7 +854,7 @@ CORR is one element of the `:corrections' list, as defined in
     (insert "\n")))
 
 (defmacro reverso--with-buffer (&rest body)
-  "Execute BODY in the clean `reverso' results buffer."
+  "Execute BODY in a clean `reverso' results buffer."
   (declare (indent 0))
   `(progn
      (let ((buffer (get-buffer-create
@@ -872,7 +872,7 @@ CORR is one element of the `:corrections' list, as defined in
 (defun reverso-check-clear (&optional region-start region-end)
   "Remove reverso grammar check overlays.
 
-If run when a region is active, remove overlays only in that region.
+If a region is active, remove overlays only in that region.
 
 REGION-START and REGION-END are borders of the region."
   (interactive (if (use-region-p)
@@ -968,7 +968,7 @@ alist as defined in `reverso--get-grammar'."
          (user-error "No errors left!"))))))
 
 (defun reverso--get-error-at-point ()
-  "Return overlay reverso error at point."
+  "Return reverso error at point."
   (cl-loop for ov in (overlays-at (point))
            if (overlay-get ov 'reverso-correction)
            return (cons ov (overlay-get ov 'reverso-correction))))
@@ -984,7 +984,7 @@ alist as defined in `reverso--get-grammar'."
       (reverso-check-next-error))))
 
 (defun reverso-describe-error-at-point ()
-  "Describe reverso-error at point."
+  "Describe reverso error at point."
   (interactive)
   (let ((err (reverso--get-error-at-point)))
     (unless err
@@ -1143,9 +1143,9 @@ slots:
   the value is a list of available target languages for that source
   language.
 
-If `is-target' is non-nil, then selection of languages has to limited.
-In that case, `reverso--source-value' is used to get the source
-language."
+If `is-target' is non-nil, then selection of languages has to be
+limited.  In that case, `reverso--source-value' is used to get the
+source language."
   (let* ((all-languages
           (seq-sort
            (lambda (a b) (string-lessp (symbol-name a)
@@ -1180,7 +1180,7 @@ called `is-target'."
     'reverso--source-value))
 
 (cl-defmethod transient-init-value ((obj reverso--transient-language))
-  "Initialize the value for the language picker.
+  "Initialize the value of the language picker.
 
 OBJ is an instance of `reverso--transient-language'."
   (let ((value
