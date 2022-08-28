@@ -1491,7 +1491,7 @@ The class doesn't actually have any value, but this is necessary for transient."
         (reverso-check-fix-at-point)
         (reverso-check-next-error))
     (error (message "Error: %s" err)))
-  (reverso-grammar-buffer))
+  (call-interactively #'reverso-grammar-buffer))
 
 (transient-define-infix reverso--transient-join-string ()
   :class 'transient-switch
