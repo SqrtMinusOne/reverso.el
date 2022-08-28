@@ -17,14 +17,14 @@ The package isn't yet available anywhere but in this repository. My preferred wa
 Or clone the repository, and it to =load-path= and =require= the package.
 
 * Usage
-There's a single entrypoint for all implemented functions, =M-x reverso=. The entirety of the UI is implemented with the excellent [[https://github.com/magit/transient/][transient.el]].
+There's a single entrypoint for all implemented functions, =M-x reverso=. The entirety of the UI is made with the excellent [[https://github.com/magit/transient/][transient.el]].
 
 ** Input handling
 All the commands handle the input the following way.
 
 By default, the input string is empty. If the command was launched with a region selected, use the string of that region. If launched with the prefix argument (=C-u=), use the entire buffer.
 
-The results of these commands are displayed in buffers with =reverso-result-mode=. If the command is launched in that buffer, the command uses the input string for the buffer. If launched with =C-u= there, use the output string of that buffer (if available).
+The results of these commands are displayed in =reverso-result-mode= buffers. If launched in that buffer, the command uses the input string for the buffer. If launched with =C-u=, it uses the output string of that buffer (if available).
 
 ** Translation
 Run =M-x reverso t= or =M-x reverso-translate= to invoke the translation transient.
@@ -33,7 +33,7 @@ Run =M-x reverso t= or =M-x reverso-translate= to invoke the translation transie
 
 The "Source language" and "Target language" parameters are self-descriptive; just note that in the general case not every language is compatible with every other language. "Swap languages" tries to swap them.
 
-If "Brief translation output" is on, the output buffer has only the translated version of the string.
+If "Brief translation output" is on, the output buffer will only show the translated version of the string.
 
 [[./img/translation-res.png]]
 
@@ -58,15 +58,15 @@ Run =M-x reverso s= or =M-x reverso-synonyms= to invoke the synonyms search.
 
 [[./img/synonyms-res.png]]
 
-The results may be split into parts of speech if that is necessary.
+The results may be split into sections by parts of speech if that is necessary.
 
-A section for each part of speech includes up to three sections:
+The section for each part of speech includes up to three sections:
 - Synonyms
 - Examples
 - Antonyms
 
 ** Grammar check
-Run =M-x reverso g= or =M-x reverso-grammar= to invoke grammar check.
+Run =M-x reverso g= or =M-x reverso-grammar= to invoke the grammar check.
 
 [[./img/grammar-transient.png]]
 
@@ -74,51 +74,51 @@ As of now, only English and French languages are available there.
 
 [[./img/grammar-res.png]]
 
-The result buffer can include the following sections:
+The results may include the following sections:
 - *Source text*, where errors are highlighted with =reverso-error-face=
 - *Corrected text*
 - *Corrections*
 
 ** Grammar check in buffer
-It may be handy to see the grammar check results in the current buffer.
-
-For that purpose, there is =M-x reverso b= or =M-x reverso-grammar-buffer=.
+It may be handy to apply the grammar check to the current buffer, that is, without using another buffer to display the results. For that purpose, there is =M-x reverso b= or =M-x reverso-grammar-buffer=.
 
 [[./img/grammar-buffer-transient.png]]
 
-Running =e= there (or =M-x reverso-check-buffer=) uses the current buffer as an input and displays the errors with [[https://www.gnu.org/software/emacs/manual/html_node/elisp/Overlays.html][overlays]]. If a region is selected, the check is limited to that region.
+Running =e= there (or =M-x reverso-check-buffer=) uses the current buffer as input and displays any errors in finds with [[https://www.gnu.org/software/emacs/manual/html_node/elisp/Overlays.html][overlays]]. If a region is selected, the check is limited to that region.
 
-There are a couple of caveats there. First, the service considers each linebreak as a new line, which is incompatible with [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Filling.html][Filling text]], i.e. breaking it into lines of a specified width. The "Remove linebreaks" (=l=) option is a workaround for that case.
+There are a couple of caveats there. First, the service considers each linebreak as a new line, which is incompatible with [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Filling.html][filling text]], i.e. breaking it into lines of a specified width. The "Remove linebreaks" option (=l=) is a workaround for this.
 
 Second, the service usually freaks out with special syntax, for instance, Org Mode links.
 
 The third partly follows from the second, because the service usually finds errors in hidden parts of Org links. That is a problem because a completely hidden overlay may be somewhat hard to access. So either skip these errors or run =M-x org-toggle-link-display= in Org files beforehand.
 
-Finally (and this concerns all other methods as well), the API usually limits the size of the input. So if the service returns an error, try running the check on a region of the buffer.
+Finally (and this concerns all other methods as well), the API usually limits the size of the input. So if the service returns an error, try running the check on a smaller region of the buffer.
 
 [[./img/grammar-buffer-res.png]]
 
 When the cursor is on an error, the error is shown in the "Information" section.
 
-"Fix error" (=f= or =M-x reverso-check-fix-at-point=) opens a completion interface with possible fixes for the error; "Ignore error" (=i= or =M-x reverso-check-ignore-error=) just removes the overlay and jumps to the next error.
+"Fix error" (=f= or =M-x reverso-check-fix-at-point=) opens a completion interface with possible fixes; "Ignore error" (=i= or =M-x reverso-check-ignore-error=) just removes the overlay and jumps to the next error.
 
 "Previous error" (=p= or =M-x reverso-check-prev-error=), "Next error" (=n= or =M-x reverso-check-next-error=), "First error" (=P= or =M-x reverso-check-first-error=) and "Last error" (=L= or =M-x reverso-check-last-error=) serve to navigate the error list.
 
-"Clear" (=c= or =M-x reverso-clear=) removes the error overlays. If a region is selected, remove overlays only in that region; otherwise, remove them from the entire buffer.
+"Clear" (=c= or =M-x reverso-clear=) removes error overlays. If a region is selected, remove overlays only in that region; otherwise, remove them from the entire buffer.
 
 * Caveats
 Before we go any further, here are some general caveats to be aware of.
 
-First, the cap on the input size was already mentioned. The obvious workaround is running the command on a region of lesser size.
+First, the package is using a reverse-engineered API, so all the obvious consequences apply. Although this service has been used in this way for some time already.
 
-Second, there are reports that Reverso dispatches *bans by IP* to particularly zealous users, so watch out for that if you are doing a lot of automated queries. This is also the reason why I didn't implement running one command on multiple consequential regions.
+Second, the cap on the input size was already mentioned. The obvious workaround is running the command on a region of lesser size.
 
-Third, be careful with what you send to the service. Don't accidentally send something confidential (like a password), or anything that can be used against you in some other way. Although the service is [[https://www.reverso.net/privacy.aspx?lang=EN][GDPR-compliant on paper]], there's no way for us to actually verify that.
+Third, there are reports that Reverso dispatches *bans by IP* to particularly zealous users, so watch out for that if you are doing a lot of automated queries. This is also the reason why I didn't implement running one command on multiple consequential regions.
+
+Fourth, be careful with what you send to the service. Don't accidentally send something confidential (like a password) or anything that can be used against you in some other way. Although the service is [[https://www.reverso.net/privacy.aspx?lang=EN][GDPR-compliant on paper]], there's no way for us to actually verify that.
 
 * Customization
-Run =M-x customize-group reverso= to see the list of the available parameters.
+Run =M-x customize-group reverso= to see the available parameters. Here are some.
 
-If you don't need all 17 languages, you can set the =reverso-languages= variable to limit that:
+If you don't need all 17 languages, you can set the =reverso-languages= variable to limit the list:
 #+begin_src emacs-lisp
 (setq reverso-languages '(english german russian))
 #+end_src
@@ -155,8 +155,8 @@ The [[https://github.com/emacs-grammarly][emacs-grammarly]] series of packages p
 
 Moreover, Grammarly is less bothered by Org and Markdown syntax, although it still doesn't like inline code blocks. Grammarly generally seems to be better at grammar-checking than Reverso, especially when it comes to rephrasing wordy sentences and punctiation. However, Grammarly also gives more false positives.
 
-Another notable grammar-checking solution is [[https://languagetool.org/][LanguageTool]], which you can [[https://dev.languagetool.org/http-server][run offline]] and use with an [[https://github.com/mhayashi1120/Emacs-langtool][Emacs package]]. This one has an obvious advantage of having no limits on usage, and not sending your data to a 3rd party server you can't control. But it still doesn't like markup syntaxes.
+Another notable grammar-checking solution is [[https://languagetool.org/][LanguageTool]], which you can [[https://dev.languagetool.org/http-server][run offline]] and use with [[https://github.com/mhayashi1120/Emacs-langtool][Emacs package]]. This one has the obvious advantage of having no limits on usage and not sending your data to a 3rd party server you can't control. But it still doesn't like markup syntaxes.
 
-[[https://github.com/valentjn/ltex-ls][LTeX LS]] is a LanguageTool-based language server, designed specifically to work with markup files like Org, Markdown, LaTeX and a bunch of others.
+[[https://github.com/valentjn/ltex-ls][LTeX LS]] is a LanguageTool-based language server, designed specifically to work with markup files like Org, Markdown, LaTeX, and a bunch of others.
 
 The [[https://www.npmjs.com/package/reverso-api][reverso-api]] npm package implements the same commands in JavaScript. It also provided invaluable information for creating this package.
