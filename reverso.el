@@ -239,7 +239,7 @@ This one is used for the synonym queries.")
   '((translation . "https://api.reverso.net/translate/v1/translation")
     (context . "https://context.reverso.net/translation/")
     (grammar . "https://orthographe.reverso.net/api/v1/Spelling")
-    (synomyms . "https://synonyms.reverso.net/synonym/"))
+    (synonyms . "https://synonyms.reverso.net/synonym/"))
   "URLs with reverso endpoints.")
 
 (defconst reverso--user-agents
@@ -448,8 +448,8 @@ DATA is an html string."
                          `((:source . ,(reverso--convert-string src))
                            (:target . ,(reverso--convert-string trg))))))))
 
-(defun reverso--get-synomyms (text language cb)
-  "Get synomyms for TEXT in LANGUAGE.
+(defun reverso--get-synonyms (text language cb)
+  "Get synonyms for TEXT in LANGUAGE.
 
 CB is called with the result.
 
@@ -463,7 +463,7 @@ The result is a list of alists with the following keys:
    - `:antonym': word"
   (unless (alist-get language reverso--language-mapping-1)
     (error "Wrong language: %s" language))
-  (request (concat (alist-get 'synomyms reverso--urls)
+  (request (concat (alist-get 'synonyms reverso--urls)
                    (symbol-name (alist-get language reverso--language-mapping-1)) "/"
                    (url-hexify-string text))
     :type "GET"
@@ -475,13 +475,13 @@ The result is a list of alists with the following keys:
     :success (cl-function
               (lambda (&key data &allow-other-keys)
                 (funcall cb (reverso--alist-remove-empty-values
-                             (reverso--get-synomyms-parse data)))))
+                             (reverso--get-synonyms-parse data)))))
     :error (cl-function
             (lambda (&key error-thrown &allow-other-keys)
               (message "Error!: %S" error-thrown)))))
 
-(defun reverso--get-synomyms-parse (html)
-  "Parse the reverso synomyms page.
+(defun reverso--get-synonyms-parse (html)
+  "Parse the reverso synonyms page.
 
 HTML is a string."
   (let* ((dom (with-temp-buffer
@@ -750,7 +750,7 @@ source languages."
   "Render synonym search results.
 
 INPUT is the input string.  DATA is a list as defined in
-`reverso--get-synomyms'."
+`reverso--get-synonyms'."
   (setq-local reverso--input input)
   (dolist (datum data)
     (when (alist-get :kind datum)
@@ -761,7 +761,7 @@ INPUT is the input string.  DATA is a list as defined in
               "\n"))
     (when (alist-get :synonyms datum)
       (insert (propertize
-               "Synomyms: "
+               "Synonyms: "
                'face 'reverso-heading-face)
               "\n")
       (dolist (synonym (alist-get :synonyms datum))
@@ -1393,16 +1393,16 @@ inputs."
   :key "e"
   :description "Find synonyms"
   (interactive (transient-args transient-current-command))
-  (reverso--get-synomyms
+  (reverso--get-synonyms
    input source
    (lambda (data)
      (reverso--with-buffer
        (reverso--synonyms-render input data)
        (setq-local reverso--data data)))))
 
-;;;###autoload (autoload 'reverso-synomyms "reverso" nil t)
+;;;###autoload (autoload 'reverso-synonyms "reverso" nil t)
 (transient-define-prefix reverso-synonyms ()
-  "Find synomyms."
+  "Find synonyms."
   ["Input"
    ("i" "Input" reverso--transient-input-infix)]
   ["Parameters"
@@ -1534,13 +1534,13 @@ region.  Otherwise, use the entire buffer."
 The following features are implemented as nested transient buffers:
 - `reverso-translate': translation
 - `reverso-context': context (bilingual concordances)
-- `reverso-synonyms': synomyms
+- `reverso-synonyms': synonyms
 - `reverso-grammar': grammar check
 - `reverso-grammar-buffer': grammar check in buffer"
   ["Commands"
    ("t" "Translation" reverso-translate)
    ("c" "Context" reverso-context)
-   ("s" "Synomyms" reverso-synonyms)
+   ("s" "Synonyms" reverso-synonyms)
    ("g" "Grammar check" reverso-grammar)
    ("b" "Grammar check in buffer" reverso-grammar-buffer)]
   ["Actions"
