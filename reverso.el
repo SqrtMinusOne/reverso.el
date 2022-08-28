@@ -1550,4 +1550,5 @@ The following features are implemented as nested transient buffers:
   (transient-setup 'reverso))
 
 (provide 'reverso)
+
 ;;; reverso.el ends here
