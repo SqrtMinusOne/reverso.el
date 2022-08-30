@@ -151,7 +151,7 @@ Reverso occasionally changes its list of available languages and the compatibili
 * Alternatives and observations
 One translation service everyone is familiar with is [[https://translate.google.com/][Google Translate]], so of course, there's an [[https://github.com/atykhonov/google-translate][Emacs client]] for it.
 
-The [[https://github.com/emacs-grammarly][emacs-grammarly]] series of packages provides an Elisp API for [[https://www.grammarly.com/][Grammarly]] (a grammar checking service) and a bunch of frontends for it. Contrary to Reverso, Grammarly had recently opened an official API (so you don't risk getting an IP ban), and the allowed input size is much greater.
+The [[https://github.com/emacs-grammarly][emacs-grammarly]] package series provides the Elisp API for [[https://www.grammarly.com/][Grammarly]] (a grammar checking service) and a bunch of frontends for it. Unlike Reverso, Grammarly has an official API (so you don't risk getting an IP ban), and the allowed input size is much greater.
 
 Moreover, Grammarly is less bothered by Org and Markdown syntax, although it still doesn't like inline code blocks. Grammarly generally seems to be better at grammar-checking than Reverso, especially when it comes to rephrasing wordy sentences and punctiation. However, Grammarly also gives more false positives.
 
