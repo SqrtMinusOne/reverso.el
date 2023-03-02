@@ -96,26 +96,34 @@
   :type 'integer
   :group 'reverso)
 
-;; This mapping is also a source of all available languages
+;; This mapping is also the source of all available languages
 (defconst reverso--language-mapping
-  '((english . eng)
-    (german . ger)
-    (spanish . spa)
-    (arabic . ara)
+  '((arabic . ara)
+    (chinese . chi)
+    (czech . cze)
+    (danish . dan)
+    (dutch . dut)
+    (english . eng)
     (french . fra)
+    (german . ger)
+    (greek . gre)
     (hebrew . heb)
+    (hindi . hin)
+    (hungarian . hun)
     (italian . ita)
     (japanese . jpn)
-    (dutch . dut)
+    (korean . kor)
+    (persian . per)
     (polish . pol)
     (portuguese . por)
     (romanian . rum)
     (russian . rus)
-    (ukrainian . ukr)
-    (turkish . tur)
-    (chinese . chi)
+    (slovak . slo)
+    (spanish . spa)
     (swedish . swe)
-    (korean . kor))
+    (thai . tha)
+    (turkish . tur)
+    (ukrainian . ukr))
   "Mapping from long language names to short ones.
 
 This one is used for the translation queries.")
@@ -140,7 +148,7 @@ This one is used for the translation queries.")
 This one is used for the synonym queries.")
 
 (defconst reverso--right-to-left-languages
-  '(arabic hebrew)
+  '(arabic hebrew persian)
   "List of languages that are written from right to left.")
 
 (defcustom reverso-languages (mapcar #'car reverso--language-mapping)
@@ -149,13 +157,12 @@ This one is used for the synonym queries.")
                          collect (list 'const (car cell)))))
 
 (defconst reverso--languages
-  '((translation . (arabic german english spanish french hebrew italian
-                           japanese dutch polish portuguese romanian russian
-                           swedish turkish ukrainian chinese))
+  `((translation . ,(mapcar #'car reverso--language-mapping))
     (context . (arabic german english spanish french hebrew italian
                        japanese dutch polish portuguese romanian
-                       russian swedish turkish ukrainian chinese))
-    (grammar . (english french))
+                       russian swedish turkish ukrainian chinese
+                       korean))
+    (grammar . (english french spanish italian))
     (synonyms . (arabic german english spanish french hebrew italian
                         japanese dutch polish portuguese romanian
                         russian)))
@@ -166,37 +173,45 @@ This one is used for the synonym queries.")
      . ((arabic . (english german spanish french hebrew italian
                            portuguese russian turkish ukrainian))
         (german . (arabic english spanish french hebrew italian
-                          japanese dutch polish portuguese romanian
-                          russian swedish turkish ukrainian))
+                          japanese korean dutch polish portuguese
+                          romanian russian swedish turkish ukrainian))
         (english . (arabic german spanish french hebrew italian
-                           japanese dutch polish portuguese romanian
-                           russian swedish turkish ukrainian chinese))
+                           japanese korean dutch polish portuguese
+                           romanian russian swedish turkish ukrainian chinese))
         (spanish . (arabic german english french hebrew italian
-                           japanese dutch polish portuguese romanian
-                           russian swedish turkish chinese ukrainian))
+                           japanese korean dutch polish portuguese
+                           romanian russian swedish turkish chinese
+                           ukrainian))
         (french . (arabic german spanish english hebrew italian
-                          japanese dutch polish portuguese romanian
-                          russian swedish turkish chinese ukrainian))
-        (hebrew . (arabic german english spanish french italian dutch
-                          portuguese russian ukrainian))
-        (italian . (arabic german english spanish french hebrew
+                          japanese korean dutch polish portuguese
+                          romanian russian swedish turkish chinese
+                          ukrainian))
+        (hebrew . (arabic german english spanish french italian korean
+                          dutch portuguese russian ukrainian))
+        (italian . (arabic german english spanish french hebrew korean
                            japanese dutch polish portuguese romanian
                            russian swedish turkish ukrainian))
-        (japanese . (german english spanish french italian portuguese
-                            russian ukrainian))
-        (dutch . (german english spanish french hebrew italian
+        (korean . (english ukrainian))
+        (japanese . (german english spanish french italian korean
+                            portuguese russian ukrainian))
+        (dutch . (german english spanish french hebrew italian korean
                          portuguese russian ukrainian))
-        (polish . (german english spanish french italian ukrainian))
-        (portuguese . (arabic german english spanish french hebrew italian
-                              japanese dutch russian turkish ukrainian))
-        (romanian . (german english spanish french italian turkish ukrainian))
-        (russian . (arabic german english spanish french hebrew italian
-                           japanese dutch portuguese ukrainian))
-        (swedish . (german english spanish french italian ukrainian))
+        (polish . (german english spanish french italian korean
+                          ukrainian))
+        (portuguese . (arabic german english spanish french hebrew
+                              italian korean japanese dutch russian
+                              turkish ukrainian))
+        (romanian . (german english spanish french italian korean
+                            turkish ukrainian))
+        (russian . (arabic german english spanish french hebrew
+                           italian japanese korean dutch portuguese
+                           ukrainian))
+        (swedish . (german english spanish french italian korean
+                           ukrainian))
         (turkish . (arabic german english spanish french italian
-                           portuguese romanian ukrainian))
-        (ukrainian . (english))
-        (chinese . (english french spanish ukrainian))))
+                           korean portuguese romanian ukrainian))
+        (ukrainian . (english korean))
+        (chinese . (english french spanish korean ukrainian))))
     ;; They've changed this multiple times while I've been working at
     ;; the package.  Finally it seems like every language is
     ;; compatible with every other, at least for the usual
@@ -544,13 +559,25 @@ The result is an alist with the following keys:
     - `:category': category of the correction, if available"
   (unless (member language (alist-get 'grammar reverso--languages))
     (error "Wrong language: %s" language))
-  (request (concat (alist-get 'grammar reverso--urls)
-                   "?text=" (url-hexify-string text)
-                   "&language=" (symbol-name
-                                 (alist-get language reverso--language-mapping))
-                   "&getCorrectionDetails=true")
-    :type "GET"
-    :headers `(("Accept" . "*/*")
+  (request (alist-get 'grammar reverso--urls)
+    :type "POST"
+    :data (json-encode
+           `((IsUserPremium . :json-false)
+             (autoReplace . t)
+             (englishDialect . "indifferent")
+             (getCorrectionDetails . t)
+             (interfaceLanguage . "en")
+             (isHtml . :json-false)
+             (language . ,(alist-get language reverso--language-mapping))
+             (locale . "")
+             (origin . "interactive")
+             (originalText . "")
+             (spellingFeedbackOptions
+              . ((insertFeedback . t)
+                 (userLoggedOn . :json-false)))
+             (text . ,text)))
+    :headers `(("Content-Type" . "application/json")
+               ("Accept" . "*/*")
                ("Connection" . "keep-alive")
                ("User-Agent" . ,reverso--user-agent))
     :parser 'json-read
