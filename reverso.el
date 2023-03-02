@@ -1,10 +1,10 @@
 ;;; reverso.el --- Translation, grammar checking, context search -*- lexical-binding: t -*-
 
-;; Copyright (C) 2022 Korytov Pavel
+;; Copyright (C) 2023 Korytov Pavel
 
 ;; Author: Korytov Pavel <thexcloud@gmail.com>
 ;; Maintainer: Korytov Pavel <thexcloud@gmail.com>
-;; Version: 0.1.0
+;; Version: 0.1.1
 ;; Package-Requires: ((emacs "27.1") (transient "0.3.7") (request "0.3.2"))
 ;; Homepage: https://github.com/SqrtMinusOne/reverso.el
 
