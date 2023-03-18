@@ -1,6 +1,6 @@
 #+TITLE: reverso.el
 
-Emacs client for the [[https://www.reverso.net/][Reverso]] service. The implemented features are:
+Emacs client for [[https://www.reverso.net/][Reverso]]. The implemented features are:
 - [[https://www.reverso.net/text-translation][Translation]]
 - [[https://context.reverso.net/translation/][Context]] (AKA bilingual concordances)
 - [[https://www.reverso.net/spell-checker/english-spelling-grammar/][Grammar check]]
@@ -14,15 +14,15 @@ The package isn't yet available anywhere but in this repository. My preferred wa
   :straight (:host github :repo "SqrtMinusOne/reverso.el"))
 #+end_src
 
-Or clone the repository, and it to =load-path= and =require= the package.
+Or clone the repository, add it to the =load-path= and =require= the package.
 
 * Usage
-There's a single entrypoint for all implemented functions, =M-x reverso=. The UI is made with the excellent [[https://github.com/magit/transient/][transient.el]].
+There's a single entrypoint for all implemented functions, =M-x reverso=. The UI is implemented with the excellent [[https://github.com/magit/transient/][transient.el]].
 
 ** Input handling
-All the commands handle the input the following way.
+All the commands handle the input as follows.
 
-By default, the input string is empty. If the command is launched with a region selected, use the string of that region. If launched with the prefix argument (=C-u=), use the entire buffer.
+By default, the input string is empty. If a command is launched with a region selected, use the string of that region. If launched with the prefix argument (=C-u=), use the entire buffer.
 
 Results are displayed in =reverso-result-mode= buffers. If launched in that buffer, the command uses the input string for the buffer. If launched with =C-u=, it uses the output string of that buffer (if available).
 
@@ -31,9 +31,9 @@ Run =M-x reverso t= or =M-x reverso-translate= to invoke the translation transie
 
 [[./img/translation-transient.png]]
 
-The "Source language" and "Target language" parameters are self-descriptive; just note that in the general case not every language is compatible with every other language. "Swap languages" tries to swap them.
+The "Source language" and "Target language" parameters are self-explanatory; just note that in the general case not every language is compatible with every other language. "Swap languages" tries to swap them.
 
-If "Brief translation output" is on, the output buffer will only show the translated version of the string.
+If "Brief translation output" is enabled, the output buffer will only show the translated version of the string.
 
 [[./img/translation-res.png]]
 
@@ -49,7 +49,7 @@ Run =M-x reverso c= or =M-x reverso-context= to invoke context search (or [[http
 
 The input/output UI looks almost the same as in the translation command.
 
-Strange enough though, direct context search usually yields different results than the "Context results" section of the translation command, so you may want to check out both if you want more data.
+Strange enough though, direct context search usually yields different results than the "Context results" section of the translation command, so you might want to check out both if you want more data.
 
 ** Synonyms
 Run =M-x reverso s= or =M-x reverso-synonyms= to invoke the synonyms search.
@@ -58,7 +58,7 @@ Run =M-x reverso s= or =M-x reverso-synonyms= to invoke the synonyms search.
 
 [[./img/synonyms-res.png]]
 
-If necessary, the results may be split into sections by parts of speech.
+If necessary, the results are split into sections by parts of speech.
 
 A section for each part of speech includes up to three subsections:
 - Synonyms
@@ -70,7 +70,7 @@ Run =M-x reverso g= or =M-x reverso-grammar= to invoke the grammar check.
 
 [[./img/grammar-transient.png]]
 
-As of now, only English and French languages are available there.
+As of now, only English, French, Spanish and Italian languages are available.
 
 [[./img/grammar-res.png]]
 
@@ -92,11 +92,11 @@ Second, the service usually freaks out with special syntax, for instance, Org Mo
 
 The third partly follows from the second, because the service usually finds errors in hidden parts of Org links. That is a problem because a completely hidden overlay may be somewhat hard to access. So either skip these errors or run =M-x org-toggle-link-display= in Org files beforehand.
 
-Finally (and this concerns all other methods as well), the API usually limits the input size. So if the service returns an error, try running the command on a smaller region of the buffer.
+Finally, (and this concerns all other methods as well), the API usually limits the input size. So, if the service returns an error, try running the command on a smaller region of the buffer.
 
 [[./img/grammar-buffer-res.png]]
 
-When the cursor is on an error, the error is shown in the "Information" section.
+When the cursor is on an error, the "Information" section shows the details.
 
 "Fix error" (=f= or =M-x reverso-check-fix-at-point=) opens a completion interface with possible fixes; "Ignore error" (=i= or =M-x reverso-check-ignore-error=) just removes the overlay and jumps to the next error.
 
@@ -153,7 +153,7 @@ One translation service everyone is familiar with is [[https://translate.google.
 
 The [[https://github.com/emacs-grammarly][emacs-grammarly]] package series provides the Elisp API for [[https://www.grammarly.com/][Grammarly]] (a grammar checking service) and a bunch of frontends for it. Unlike Reverso, Grammarly has an official API (so you don't risk getting an IP ban), and the allowed input size is much greater.
 
-Moreover, Grammarly is less bothered by Org and Markdown syntax, although it still doesn't like inline code blocks. Grammarly generally seems to be better at grammar-checking than Reverso, especially when it comes to rephrasing wordy sentences and punctiation. However, Grammarly also gives more false positives.
+Moreover, Grammarly is less bothered by Org and Markdown syntax, although it still doesn't like inline code blocks. Grammarly generally seems to be better at grammar-checking than Reverso, especially when it comes to rephrasing wordy sentences and punctuation. However, Grammarly also gives more false positives.
 
 Another notable grammar-checking solution is [[https://languagetool.org/][LanguageTool]], which you can [[https://dev.languagetool.org/http-server][run offline]] and use with its [[https://github.com/mhayashi1120/Emacs-langtool][Emacs package]]. This one has the obvious advantage of having no limits on usage and not sending your data to a 3rd party server you can't control. But it still doesn't like markup syntaxes.
 
