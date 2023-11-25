@@ -17,115 +17,126 @@ The package isn't yet available anywhere but in this repository. My preferred wa
 Or clone the repository, add it to the =load-path= and =require= the package.
 
 * Usage
-There's a single entrypoint for all implemented functions, =M-x reverso=. The UI is implemented with the excellent [[https://github.com/magit/transient/][transient.el]].
+There's a single entrypoint for all implemented functions: =M-x reverso=. The UI is implemented using the excellent [[https://github.com/magit/transient/][transient.el]].
 
-** Input handling
-All the commands handle the input as follows.
+** Input Handling
+All commands handle input as follows:
 
 By default, the input string is empty. If a command is launched with a region selected, use the string of that region. If launched with the prefix argument (=C-u=), use the entire buffer.
 
-Results are displayed in =reverso-result-mode= buffers. If launched in that buffer, the command uses the input string for the buffer. If launched with =C-u=, it uses the output string of that buffer (if available).
+Results are displayed in =reverso-result-mode= buffers. When launched within that buffer, the command uses the input string specific to the buffer. If launched with =C-u=, it uses the output string from that buffer (if available).
 
 ** Translation
-Run =M-x reverso t= or =M-x reverso-translate= to invoke the translation transient.
+Use =M-x reverso t= or =M-x reverso-translate= to invoke the translation transient.
 
 [[./img/translation-transient.png]]
 
-The "Source language" and "Target language" parameters are self-explanatory; just note that in the general case not every language is compatible with every other language. "Swap languages" tries to swap them.
+The "Source language" and "Target language" parameters are self-explanatory. Note that not every language is compatible with every other language in the general case. "Swap languages" attempts to swap them.
 
-If "Brief translation output" is enabled, the output buffer will only show the translated version of the string.
+Enabling "Brief translation output" will display only the translated version of the string in the output buffer.
 
 [[./img/translation-res.png]]
 
-Otherwise, the result buffer can include the following sections:
+Otherwise, the result buffer may contain the following sections:
 - *Source text* and *Translation*
 - *Corrected text*, if available
 - *Context results*, if available
 
-Context results usually appear for short strings, like in the example from the screenshot.
+Context results typically appear for short strings, as seen in the example from the screenshot.
 
 ** Context
-Run =M-x reverso c= or =M-x reverso-context= to invoke context search (or [[https://en.wikipedia.org/w/index.php?title=Online_bilingual_concordance&redirect=no][bilingual concordances]], essentially a Rosetta stone generator).
+Use =M-x reverso c= or =M-x reverso-context= to invoke context search (or [[https://en.wikipedia.org/w/index.php?title=Online_bilingual_concordance&redirect=no][bilingual concordances]], essentially a Rosetta stone generator).
 
-The input/output UI looks almost the same as in the translation command.
+The input/output UI resembles that of the translation command.
 
-Strange enough though, direct context search usually yields different results than the "Context results" section of the translation command, so you might want to check out both if you want more data.
+Interestingly, direct context search often yields different results than the "Context results" section of the translation command. Hence, checking both might provide more comprehensive data.
 
 ** Synonyms
-Run =M-x reverso s= or =M-x reverso-synonyms= to invoke the synonyms search.
+Use =M-x reverso s= or =M-x reverso-synonyms= to invoke the synonyms search.
 
 [[./img/synonyms-transient.png]]
 
 [[./img/synonyms-res.png]]
 
-If necessary, the results are split into sections by parts of speech.
+If necessary, results are segmented by parts of speech.
 
-A section for each part of speech includes up to three subsections:
+Each part of speech section contains up to three subsections:
 - Synonyms
 - Examples
 - Antonyms
 
 ** Grammar check
-Run =M-x reverso g= or =M-x reverso-grammar= to invoke the grammar check.
+Use =M-x reverso g= or =M-x reverso-grammar= to invoke the grammar check.
 
 [[./img/grammar-transient.png]]
 
-As of now, only English, French, Spanish and Italian languages are available.
+Currently, only English, French, Spanish, and Italian languages are available.
 
 [[./img/grammar-res.png]]
 
-The results may include the following sections:
-- *Source text*, where errors are highlighted with =reverso-error-face=
+The results may contain the following sections:
+- *Source text*, highlighting errors with =reverso-error-face=
 - *Corrected text*
 - *Corrections*
 
 ** Grammar check in buffer
-It may be handy to apply the grammar check to the current buffer, that is, without using another buffer to display the results. For that purpose, there is =M-x reverso b= or =M-x reverso-grammar-buffer=.
+It can be convenient to apply the grammar check directly to the current buffer without displaying results in another buffer. Use =M-x reverso b= or =M-x reverso-grammar-buffer= for this.
 
 [[./img/grammar-buffer-transient.png]]
 
-Running =e= there (or =M-x reverso-check-buffer=) uses the current buffer as input and displays any errors in finds with [[https://www.gnu.org/software/emacs/manual/html_node/elisp/Overlays.html][overlays]]. If a region is selected, the check is limited to that region.
+Running =e= there (or =M-x reverso-check-buffer=) utilizes the current buffer as input and highlights any found errors using overlays. If a region is selected, the check is confined to that region.
 
 There are a couple of caveats there. First, the service considers each linebreak as a new line, which is incompatible with [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Filling.html][filling text]], i.e. breaking it into lines of a specified width. The "Remove linebreaks" option (=l=) is a workaround for this.
 
-Second, the service usually freaks out with special syntax, for instance, Org Mode links.
+Secondly, the service usually freaks out with special syntax, for instance, Org Mode links.
 
-The third partly follows from the second, because the service usually finds errors in hidden parts of Org links. That is a problem because a completely hidden overlay may be somewhat hard to access. So either skip these errors or run =M-x org-toggle-link-display= in Org files beforehand.
+The third issue partly follows from the second one, as the service often finds "errors" within hidden parts of Org links. Either skip these errors or execute =M-x org-toggle-link-display= in Org files beforehand.
 
-Finally, (and this concerns all other methods as well), the API usually limits the input size. So, if the service returns an error, try running the command on a smaller region of the buffer.
+Lastly (and this applies to all other methods as well), the API usually restricts input size. If the service returns an error, try running the command on a smaller region of the buffer.
 
 [[./img/grammar-buffer-res.png]]
 
-When the cursor is on an error, the "Information" section shows the details.
+When the cursor is placed on an error, the "Information" section provides details.
 
-"Fix error" (=f= or =M-x reverso-check-fix-at-point=) opens a completion interface with possible fixes; "Ignore error" (=i= or =M-x reverso-check-ignore-error=) just removes the overlay and jumps to the next error.
+"Fix error" (=f= or =M-x reverso-check-fix-at-point=) opens a completion interface with potential fixes. "Ignore error" (=i= or =M-x reverso-check-ignore-error=) simply removes the overlay and moves to the next error.
 
 "Previous error" (=p= or =M-x reverso-check-prev-error=), "Next error" (=n= or =M-x reverso-check-next-error=), "First error" (=P= or =M-x reverso-check-first-error=) and "Last error" (=L= or =M-x reverso-check-last-error=) serve to navigate the error list.
 
-"Clear" (=c= or =M-x reverso-clear=) removes error overlays. If a region is selected, remove overlays only in that region; otherwise, remove them from the entire buffer.
+"Clear" (=c= or =M-x reverso-clear=) removes error overlays. If a region is selected, it removes overlays only in that region; otherwise, it removes them from the entire buffer.
+
+** History
+Enable =reverso-history-mode= to keep history:
+
+#+begin_src emacs-lisp
+(reverso-history-mode)
+#+end_src
+
+I haven't implemented persistence yet, but I might in the future.
+
+After enabling the minor mode, =M-x reverso-history= or =M-x reverso h= will display recent commans. =RET= on shows the results of each command.
 
 * Caveats
-Before we go any further, here are some general caveats to be aware of.
+Before proceeding further, here are some general caveats to be aware of.
 
-First, the package is using a reverse-engineered API, so all the obvious consequences apply. Although this service has been used in this way for some time already.
+Firstly, the package uses a reverse-engineered API, so all the typical consequences apply, such as sudden irreparable breakages. Although I've been using it for over a year, so... maybe not.
 
-Second, the cap on the input size was already mentioned. The obvious workaround is running the command on a region of lesser size.
+Secondly, the limit on input size has been mentioned. The obvious is executing commands on a smaller region.
 
-Third, there are reports that Reverso dispatches *bans by IP* to particularly zealous users, so watch out for that if you are doing a lot of automated queries. This is also the reason why I didn't implement running one command on multiple consequential regions.
+Thirdly, there have been reports that Reverso dispatches *IP bans* to particularly enthusiastic users, so be cautious if you're sending lots of automated queries. This is also why I didn't implement running one command for multiple consecutive regions.
 
-Fourth, be careful with what you send to the service. Don't accidentally send something confidential (like a password) or anything that can be used against you in some other way. Although the service is [[https://www.reverso.net/privacy.aspx?lang=EN][GDPR-compliant on paper]], there's no way for us to actually verify that.
+Lastly, exercise caution with the content sent to the service. Avoid inadvertently sharing confidential information (like passwords) or anything that could be used against you in other ways. While the service claims to be [[https://www.reverso.net/privacy.aspx?lang=EN][GDPR-compliant]], we can't actually check that.
 
 * Customization
-Run =M-x customize-group reverso= to see the available parameters. Here are some.
+Run =M-x customize-group reverso= to view the available parameters. Here are a few.
 
-If you don't need all 17 languages, you can set the =reverso-languages= variable to limit the list:
+If you don't need all 17 languages, customize the =reverso-languages= variable to narrow down the list:
 #+begin_src emacs-lisp
 (setq reverso-languages '(english german russian))
 #+end_src
 
-If the length of =reverso-languages= is greater than =reverso-language-completing-read-threshold=, switching a language in transient buffers will invoke =completing-read= (i.e. minibuffer completion). Otherwise, switching will just switch to the next one.
+If the length of =reverso-languages= exceeds =reverso-language-completing-read-threshold=, switching a language in transient buffers will invoke =completing-read= (minibuffer completion). Otherwise, it will simply switch to the next language available.
 
-=reverso-max-display-lines-in-input= controls how many lines can be displayed in the input section of a transient buffer.
+=reverso-max-display-lines-in-input= controls the maximum number of lines displayed in the input section of a transient buffer.
 
 The available faces:
 - =reverso-highlight-face=
@@ -136,27 +147,27 @@ The available faces:
 are inherited from the faces of =transient.el= and =basic-faces= to look nice.
 
 * Elisp API
-In case you want to do something in Emacs Lisp, there are 4 main functions that call the Reverso API:
+In Emacs Lisp, there are four primary functions that interact with the Reverso API:
 - =reverso--translate=
 - =reverso--get-context=
 - =reverso--get-grammar=
 - =reverso--get-context=
 
-Take a look at the docstrings for more information.
+Refer to the docstrings for more detailed information.
 
-Every function is asynchronous, and the results are returned via a callback.
+Each function is asynchronous, and the results are retrieved via a callback.
 
-Reverso occasionally changes its list of available languages and the compatibility matrix, so if you change any of these, run =reverso-verify-settings= to check for errors.
+As Reverso sometimes modifies its available languages and compatibility matrix, so if you change that, execute =reverso-verify-settings= to check for potential errors.
 
-* Alternatives and observations
-One translation service everyone is familiar with is [[https://translate.google.com/][Google Translate]], so of course, there's an [[https://github.com/atykhonov/google-translate][Emacs client]] for it.
+* Alternatives and Observations
+A widely recognized translation service is [[https://translate.google.com/][Google Translate]], so of course, there's an [[https://github.com/atykhonov/google-translate][Emacs client]] for it.
 
-The [[https://github.com/emacs-grammarly][emacs-grammarly]] package series provides the Elisp API for [[https://www.grammarly.com/][Grammarly]] (a grammar checking service) and a bunch of frontends for it. Unlike Reverso, Grammarly has an official API (so you don't risk getting an IP ban), and the allowed input size is much greater.
+The [[https://github.com/emacs-grammarly][emacs-grammarly]] package series provides the Elisp API for [[https://www.grammarly.com/][Grammarly]] (a grammar checking service) along with multiple frontends. Unlike Reverso, Grammarly has an official API (so you don't risk getting an IP ban), and it allows a much larger input size.
 
-Moreover, Grammarly is less bothered by Org and Markdown syntax, although it still doesn't like inline code blocks. Grammarly generally seems to be better at grammar-checking than Reverso, especially when it comes to rephrasing wordy sentences and punctuation. However, Grammarly also gives more false positives.
+Additionally, Grammarly is less bothered by Org and Markdown syntax, although it struggles with inline code blocks. It seems to do work generally better than Reverso, but it also generates a lot of false positives. For instance, it finds a lot of issues in [[https://www.economist.com/][The Economist]] articles, which, I think, have beautiful English.
 
-Another notable grammar-checking solution is [[https://languagetool.org/][LanguageTool]], which you can [[https://dev.languagetool.org/http-server][run offline]] and use with its [[https://github.com/mhayashi1120/Emacs-langtool][Emacs package]]. This one has the obvious advantage of having no limits on usage and not sending your data to a 3rd party server you can't control. But it still doesn't like markup syntaxes.
+Another notable grammar-checking solution is [[https://languagetool.org/][LanguageTool]], which can be [[https://dev.languagetool.org/http-server][run offline]] and used with its [[https://github.com/mhayashi1120/Emacs-langtool][Emacs package]]. This tool offers the advantage of unlimited usage and doesn't transmit your data to a third-party server you can't control. But it still doesn't like markup syntaxes.
 
-[[https://github.com/valentjn/ltex-ls][LTeX LS]] is a LanguageTool-based language server, designed specifically to work with markup files like Org, Markdown, LaTeX, and a bunch of others.
+Also, I've been pretty happy with [[https://github.com/valentjn/ltex-ls][LTeX LS]], which is a LanguageTool-based language server explicitly designed to support markup formats like Org, Markdown, LaTeX, among others.
 
 The [[https://www.npmjs.com/package/reverso-api][reverso-api]] npm package implements the same commands in JavaScript. It also provided invaluable information for creating this package.
