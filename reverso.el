@@ -284,8 +284,11 @@ The operations are:
 - `reverso--get-synonyms'
 - `reverso--get-grammar'
 
-The hook is called with two arguments: the operation name (the
-function symbol) and the result of the operation.")
+The hook is called with the following arguments:
+- the operation name
+- the result of the operation, that is the value passed to the
+  callback
+- parameters of the operation")
 
 (defun reverso--translate (text source target cb)
   "Translate TEXT from language SOURCE to TARGET.
@@ -340,7 +343,10 @@ The result is an alist with the following keys:
                             (reverso--translate-parse data))))
                   (run-hook-with-args
                    'reverso--operation-hook
-                   'reverso--translate res)
+                   'reverso--translate res
+                   `((:text . ,text)
+                     (:source . ,source)
+                     (:target . ,target)))
                   (funcall cb res))))
     :error (cl-function
             (lambda (&key error-thrown &allow-other-keys)
@@ -461,7 +467,10 @@ The result is a list of alists with the keys:
                             (reverso--get-context-parse data))))
                   (run-hook-with-args
                    'reverso--operation-hook
-                   'reverso--get-context res)
+                   'reverso--get-context res
+                   `((:text . ,text)
+                     (:source . ,source)
+                     (:target . ,target)))
                   (funcall cb res))))
     :error (cl-function
             (lambda (&key error-thrown &allow-other-keys)
@@ -513,7 +522,9 @@ The result is a list of alists with the following keys:
                             (reverso--get-synonyms-parse data))))
                   (run-hook-with-args
                    'reverso--operation-hook
-                   'reverso--get-synonyms res)
+                   'reverso--get-synonyms res
+                   `((:text . ,text)
+                     (:language . ,language)))
                   (funcall cb res))))
     :error (cl-function
             (lambda (&key error-thrown &allow-other-keys)
@@ -612,7 +623,9 @@ The result is an alist with the following keys:
                             (reverso--get-grammar-parse text data))))
                   (run-hook-with-args
                    'reverso--operation-hook
-                   'reverso--get-grammar res)
+                   'reverso--get-grammar res
+                   `((:text . ,text)
+                     (:language . ,language)))
                   (funcall cb res))))
     :error (cl-function
             (lambda (&key error-thrown &allow-other-keys)
