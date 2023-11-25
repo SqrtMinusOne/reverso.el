@@ -275,6 +275,18 @@ A random one is be picked at package initialization.")
        reverso--user-agents)
   "User-Agent to use for reverso.el requests.")
 
+(defvar reverso--operation-hook nil
+  "Hook run after an operation.
+
+The operations are:
+- `reverso--translate'
+- `reverso--get-context'
+- `reverso--get-synonyms'
+- `reverso--get-grammar'
+
+The hook is called with two arguments: the operation name (the
+function symbol) and the result of the operation.")
+
 (defun reverso--translate (text source target cb)
   "Translate TEXT from language SOURCE to TARGET.
 
@@ -288,9 +300,9 @@ The result is an alist with the following keys:
 - `:detected-language': the detected source language
 - `:translation': a string with translated text
 - `:context-results': a list with found contexts.
-   An item of the list is an alist with the keys:
-   - `:source': a string in the source language
-   - `:target': a string in the target language"
+  One item of the list is an alist with the keys:
+  - `:source': string in the source language
+  - `:target': string in the target language"
   (when (string-empty-p text)
     (user-error "Empty input!"))
   (unless (and (alist-get source reverso--language-mapping)
@@ -324,8 +336,12 @@ The result is an alist with the following keys:
     :encoding 'utf-8
     :success (cl-function
               (lambda (&key data &allow-other-keys)
-                (funcall cb (reverso--alist-remove-empty-values
-                             (reverso--translate-parse data)))))
+                (let ((res (reverso--alist-remove-empty-values
+                            (reverso--translate-parse data))))
+                  (run-hook-with-args
+                   'reverso--operation-hook
+                   'reverso--translate res)
+                  (funcall cb res))))
     :error (cl-function
             (lambda (&key error-thrown &allow-other-keys)
               (message "Error!: %S" error-thrown)))))
@@ -441,8 +457,12 @@ The result is a list of alists with the keys:
     :encoding 'utf-8
     :success (cl-function
               (lambda (&key data &allow-other-keys)
-                (funcall cb (reverso--alist-remove-empty-values
-                             (reverso--get-context-parse data)))))
+                (let ((res (reverso--alist-remove-empty-values
+                            (reverso--get-context-parse data))))
+                  (run-hook-with-args
+                   'reverso--operation-hook
+                   'reverso--get-context res)
+                  (funcall cb res))))
     :error (cl-function
             (lambda (&key error-thrown &allow-other-keys)
               (message "Error!: %S" error-thrown)))))
@@ -489,8 +509,12 @@ The result is a list of alists with the following keys:
     :encoding 'utf-8
     :success (cl-function
               (lambda (&key data &allow-other-keys)
-                (funcall cb (reverso--alist-remove-empty-values
-                             (reverso--get-synonyms-parse data)))))
+                (let ((res (reverso--alist-remove-empty-values
+                            (reverso--get-synonyms-parse data))))
+                  (run-hook-with-args
+                   'reverso--operation-hook
+                   'reverso--get-synonyms res)
+                  (funcall cb res))))
     :error (cl-function
             (lambda (&key error-thrown &allow-other-keys)
               (message "Error!: %S" error-thrown)))))
@@ -584,8 +608,12 @@ The result is an alist with the following keys:
     :encoding 'utf-8
     :success (cl-function
               (lambda (&key data &allow-other-keys)
-                (funcall cb (reverso--alist-remove-empty-values
-                             (reverso--get-grammar-parse text data)))))
+                (let ((res (reverso--alist-remove-empty-values
+                            (reverso--get-grammar-parse text data))))
+                  (run-hook-with-args
+                   'reverso--operation-hook
+                   'reverso--get-grammar res)
+                  (funcall cb res))))
     :error (cl-function
             (lambda (&key error-thrown &allow-other-keys)
               (message "Error!: %S" error-thrown)))))
