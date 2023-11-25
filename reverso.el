@@ -1240,6 +1240,9 @@ OP, DATA and PARAMS are as described in `reverso--operation-hook'."
 
 Enable `reverso-history-mode' to record history."
   (interactive)
+  (when (and (seq-empty-p reverso--history)
+             (not reverso-history-mode))
+    (user-error "Enable `reverso-history-mode' to record history"))
   (reverso--with-buffer
     (insert
      (format
