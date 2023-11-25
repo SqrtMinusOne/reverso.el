@@ -53,6 +53,7 @@
 (require 'transient)
 (require 'url-util)
 (require 'dom)
+(require 'widget)
 
 ;; XXX Compatibility with evil
 (declare-function evil-define-key* "evil-core")
@@ -84,6 +85,10 @@
 (defface reverso-definition-face
   '((t (:inherit italic)))
   "Face for word definitions in reverso buffers."
+  :group 'reverso)
+
+(defface reverso-history-item-face nil
+  "Face for history items in `reverso-history'."
   :group 'reverso)
 
 (defcustom reverso-max-display-lines-in-input 5
@@ -673,11 +678,13 @@ SOURCE-TEXT is the text sent for checking.  DATA is the JSON reply."
     (define-key map (kbd "q") (lambda ()
                                 (interactive)
                                 (quit-window t)))
+    (define-key map (kbd "RET") #'widget-button-press)
     (when (fboundp #'evil-define-key*)
       (evil-define-key* '(normal motion) map
         "q" (lambda ()
               (interactive)
-              (quit-window t))))
+              (quit-window t))
+        (kbd "RET") #'widget-button-press))
     map)
   "Keymap used in `reverso-result-mode' buffers.")
 
@@ -1112,6 +1119,146 @@ If STRING-JOIN is non-nil, remove linebreaks from the string."
      (lambda (data)
        (reverso--check-make-overlays region-start region-end data)
        (message "Check complete!")))))
+
+;;; History
+(defvar reverso--history nil
+  "History of the last queries.
+
+Each item is a list as described in `reverso--operation-hook', plus
+the timestamp as the fourth element.")
+
+(defcustom reverso-history-size 200
+  "Maximum number of items in `reverso--history'."
+  :type 'integer
+  :group 'reverso)
+
+(defcustom reverso-timestamp-format "%Y-%m-%d %H:%M:%S"
+  "Format string for timestamps in `reverso--history'."
+  :type 'string
+  :group 'reverso)
+
+(defun reverso--history-add (op data params)
+  "Add an item to `reverso--history'.
+
+OP, DATA and PARAMS are as described in `reverso--operation-hook'."
+  (push (list op data params (time-convert nil 'integer)) reverso--history)
+  (when (> (length reverso--history) reverso-history-size)
+    (setq reverso--history (butlast reverso--history))))
+
+;;;###autoload
+(define-minor-mode reverso-history-mode
+  "Minor mode for recording history of reverso queries."
+  :lighter " Reverso History"
+  :global t
+  (if reverso-history-mode
+      (add-hook 'reverso--operation-hook #'reverso--history-add)
+    (remove-hook 'reverso--operation-hook #'reverso--history-add)))
+
+(defun reverso--history-format-item (item)
+  "Format a history ITEM for display."
+  (apply
+   #'format
+   "%-20s %-20s %s"
+   (format-time-string
+    reverso-timestamp-format
+    (seconds-to-time (nth 3 item)))
+   (pcase (nth 0 item)
+     ('reverso--translate
+      (list
+       "Translate"
+       (format "%s -> %s: %s -> %s"
+               (propertize
+                (symbol-name (alist-get :language-from (nth 1 item)))
+                'face 'reverso-keyword-face)
+               (propertize
+                (symbol-name (alist-get :language-to (nth 1 item)))
+                'face
+                'reverso-keyword-face)
+               (alist-get :text (nth 2 item))
+               (alist-get :translation (nth 1 item)))))
+     ('reverso--get-grammar
+      (list
+       "Grammar check"
+       (format "%s: %s -> %s"
+               (propertize
+                (symbol-name (alist-get :language (nth 2 item)))
+                'face 'reverso-keyword-face)
+               (alist-get :source-text-hl (nth 1 item))
+               (alist-get :corrected-text (nth 1 item)))))
+     ('reverso--get-context
+      (list
+       "Context"
+       (format "%s -> %s: %s (%d results)"
+               (propertize
+                (symbol-name (alist-get :source (nth 2 item)))
+                'face 'reverso-keyword-face)
+               (propertize
+                (symbol-name (alist-get :target (nth 2 item)))
+                'face
+                'reverso-keyword-face)
+               (alist-get :text (nth 2 item))
+               (length (nth 1 item)))))
+     ('reverso--get-synonyms
+      (list
+       "Synonyms"
+       (format
+        "%s: %s (%d results)"
+        (propertize
+         (symbol-name (alist-get :language (nth 2 item)))
+         'face 'reverso-keyword-face)
+        (alist-get :text (nth 2 item))
+        (cl-reduce (lambda (acc x)
+                     (+ acc (length (alist-get :synonyms x))))
+                   (nth 1 item)
+                   :initial-value 0)))))))
+
+(defun reverso--history-display (widget &rest _)
+  "Action for displaying a history item in a WIDGET."
+  (let ((item (widget-get widget :item)))
+    (reverso--with-buffer
+      (setq-local reverso--data (nth 1 item))
+      (pcase (nth 0 item)
+        ('reverso--translate
+         (reverso--translate-render
+          (alist-get :text (nth 2 item))
+          (nth 1 item)))
+        ('reverso--get-grammar
+         (reverso--grammar-render (nth 1 item)))
+        ('reverso--get-context
+         (reverso--context-render
+          (alist-get :text (nth 2 item))
+          (nth 1 item)
+          (alist-get :source (nth 2 item))
+          (alist-get :target (nth 2 item))))
+        ('reverso--get-synonyms
+         (reverso--synonyms-render
+          (alist-get :text (nth 2 item))
+          (nth 1 item)))))))
+
+(defun reverso-history ()
+  "Display the history of reverso queries.
+
+Enable `reverso-history-mode' to record history."
+  (interactive)
+  (reverso--with-buffer
+    (insert
+     (format
+      "%-20s %-20s %s\n"
+      (propertize
+       "Timestamp" 'face 'reverso-heading-face)
+      (propertize
+       "Operation" 'face 'reverso-heading-face)
+      (propertize
+       "Parameters" 'face 'reverso-heading-face)))
+    (setq-local widget-push-button-prefix "")
+    (setq-local widget-push-button-suffix "")
+    (dolist (item reverso--history)
+      (widget-create 'push-button
+                     :notify #'reverso--history-display
+                     :item item
+                     :button-face 'reverso-history-item-face
+                     (reverso--history-format-item item))
+      (insert "\n"))))
 
 ;;; Transient
 
@@ -1611,6 +1758,8 @@ The following features are implemented as nested transient buffers:
    ("s" "Synonyms" reverso-synonyms)
    ("g" "Grammar check" reverso-grammar)
    ("b" "Grammar check in buffer" reverso-grammar-buffer)]
+  ["Other"
+   ("h" "History" reverso-history)]
   ["Actions"
    ("q" "Quit" transient-quit-one)]
   (interactive)
