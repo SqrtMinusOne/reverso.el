@@ -4,9 +4,10 @@
 
 ;; Author: Korytov Pavel <thexcloud@gmail.com>
 ;; Maintainer: Korytov Pavel <thexcloud@gmail.com>
-;; Version: 0.1.1
+;; Version: 0.1.2
 ;; Package-Requires: ((emacs "27.1") (transient "0.3.7") (request "0.3.2"))
 ;; Homepage: https://github.com/SqrtMinusOne/reverso.el
+;; Published-At: 2022-08-28
 
 ;; This file is NOT part of GNU Emacs.
 
