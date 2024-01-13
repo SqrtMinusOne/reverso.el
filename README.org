@@ -5,6 +5,7 @@ Emacs client for [[https://www.reverso.net/][Reverso]]. The implemented features
 - [[https://context.reverso.net/translation/][Context]] (AKA bilingual concordances)
 - [[https://www.reverso.net/spell-checker/english-spelling-grammar/][Grammar check]]
 - [[https://synonyms.reverso.net/synonym/][Synonyms search]]
+- [[https://conjugator.reverso.net/conjugation-english.html][Conjugation]]
 
 * Installation
 The package isn't yet available anywhere but in this repository. My preferred way for such cases is [[https://github.com/jwiegley/use-package][use-package]] and [[https://github.com/radian-software/straight.el][straight.el]]:
@@ -64,6 +65,13 @@ Each part of speech section contains up to three subsections:
 - Synonyms
 - Examples
 - Antonyms
+
+** Conjugation
+Use =M-x reverso o= or =M-x reverso-conjugation= to invoke verb conjugation dialog.
+
+[[./img/conjugation-transient.png]]
+
+[[./img/conjugation-res.png]]
 
 ** Grammar check
 Use =M-x reverso g= or =M-x reverso-grammar= to invoke the grammar check.
