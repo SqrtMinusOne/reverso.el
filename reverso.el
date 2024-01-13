@@ -35,6 +35,7 @@
 ;; - "Context" or bilingual concordances (run `reverso-context')
 ;; - Grammar check (run `reverso-grammar')
 ;; - Synonyms search (run `reverso-synonyms')
+;; - Verb conjugation (run `reverso-conjugation')
 ;; There's also `reverso-grammar-buffer', which does grammar check in
 ;; the current buffer and displays the result with overlays.
 ;;
@@ -45,6 +46,8 @@
 ;; - `reverso--get-context'
 ;; - `reverso--get-grammar'
 ;; - `reverso--get-context'
+;; - `reverso--get-synonyms'
+;; - `reverso--get-conjugation'
 ;;
 ;; Also check out the README file at
 ;; <https://github.com/SqrtMinusOne/reverso.el>
@@ -55,6 +58,7 @@
 (require 'url-util)
 (require 'dom)
 (require 'widget)
+(require 'wid-edit)
 
 ;; XXX Compatibility with evil
 (declare-function evil-define-key* "evil-core")
@@ -1086,7 +1090,8 @@ CORR is one element of the `:corrections' list, as defined in
 (defun reverso--conjugation-render (input data)
   "Render conjugation results.
 
-DATA is a form as described in `reverso--get-conjugation'."
+DATA is a form as described in `reverso--get-conjugation'.  INPUT is
+the input string."
   (setq-local reverso--input input)
   (insert (propertize "Word: " 'face 'reverso-heading-face)
           (alist-get :word data)
