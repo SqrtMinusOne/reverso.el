@@ -171,7 +171,9 @@ This one is used for the synonym queries.")
     (grammar . (english french spanish italian))
     (synonyms . (arabic german english spanish french hebrew italian
                         japanese dutch polish portuguese romanian
-                        russian)))
+                        russian))
+    (conjugation . (english french spanish german italian portuguese
+                            hebrew russian arabic japanese)))
   "Available languages for diferent operations.")
 
 (defconst reverso--languages-compatible
@@ -260,7 +262,8 @@ This one is used for the synonym queries.")
   '((translation . "https://api.reverso.net/translate/v1/translation")
     (context . "https://context.reverso.net/translation/")
     (grammar . "https://orthographe.reverso.net/api/v1/Spelling")
-    (synonyms . "https://synonyms.reverso.net/synonym/"))
+    (synonyms . "https://synonyms.reverso.net/synonym/")
+    (conjugation . "https://conjugator.reverso.net/"))
   "URLs with reverso endpoints.")
 
 (defconst reverso--user-agents
@@ -671,6 +674,128 @@ SOURCE-TEXT is the text sent for checking.  DATA is the JSON reply."
     `((:corrected-text . ,corrected-text)
       (:source-text-hl . ,source-text-hl)
       (:corrections . ,corrections))))
+
+(defun reverso--empty-to-nil (value)
+  (if (or (null value) (string-empty-p value))
+      nil
+    value))
+
+(defun reverso--get-conjugation-parse-alternate (data)
+  (when-let ((alts (thread-first data
+                                 (dom-by-id "ch_divConjugatorHeader")
+                                 (dom-by-class "alternate-versions"))))
+    `((model . ,(thread-first alts
+                              (dom-by-id (rx bos "ch_lblModel" eos))
+                              ;; (dom-by-tag 'a)
+                              (dom-texts)
+                              (string-trim)
+                              (reverso--empty-to-nil)))
+      (auxiliary . ,(thread-first alts
+                                  (dom-by-id (rx bos "ch_lblAuxiliary" eos))
+                                  (dom-texts)
+                                  (string-trim)
+                                  (reverso--empty-to-nil)))
+      (other-forms . ,(thread-first alts
+                                    (dom-by-id (rx bos "ch_lblAutreForm" eos))
+                                    (dom-texts)
+                                    (string-trim)
+                                    (reverso--empty-to-nil))))))
+
+(defun reverso--get-conjugation-parse-boxes (data)
+  (when-let ((boxes (thread-first data
+                                  (dom-by-class "result-block-api")
+                                  (car)
+                                  (dom-by-class "blue-box-wrap"))))
+    (mapcar
+     (lambda (box)
+       (let* ((title (dom-attr box 'mobile-title))
+              (listing
+               (mapcar
+                (lambda (item)
+                  (let* ((text (string-trim (dom-texts item "")))
+                         (verb (thread-first item
+                                             (dom-by-class "verb")
+                                             (dom-texts)
+                                             (string-trim)))
+                         (verb-pos (string-match-p (regexp-quote verb) text))
+                         (v (dom-attr item 'v)))
+                    (when verb-pos
+                      (put-text-property
+                       verb-pos
+                       (+ verb-pos (length verb))
+                       'face
+                       'reverso-highlight-face
+                       text))
+                    (cons
+                     (replace-regexp-in-string
+                      (rx (+ space))
+                      " "
+                      text)
+                     v)))
+                (thread-first box
+                              (dom-by-class "wrap-verbs-listing")
+                              (dom-by-tag 'li))))
+              (listing-by-v
+               (mapcar (lambda (group)
+                         (cons
+                          (car group)
+                          (mapcar #'car (cdr group))))
+                       (seq-group-by #'cdr listing))))
+         `((title . ,title)
+           (listing . ,listing-by-v))))
+     boxes)))
+
+(defun reverso--get-conjugation-parse (data)
+  (let* ((html (with-temp-buffer
+                 (insert data)
+                 (libxml-parse-html-region (point-min) (point-max))))
+         (word (thread-first html
+                             (dom-by-id "ch_lblVerb")
+                             (dom-texts)
+                             (string-trim)))
+         (translit-word
+          (thread-first html
+                        (dom-by-id "ch_lblVerbTranslit")
+                        (dom-texts)
+                        (string-trim)
+                        (reverso--empty-to-nil)))
+         (alternate (reverso--get-conjugation-parse-alternate html))
+         (boxes (reverso--get-conjugation-parse-boxes html)))
+    `((word . ,word)
+      (translit-word . ,translit-word)
+      (alternate . ,alternate)
+      (boxes . ,boxes))))
+
+(defun reverso--get-conjugation (word language cb)
+  (unless (thread-last reverso--languages
+                       (alist-get 'conjugation)
+                       (alist-get language))
+    (request (concat
+              (alist-get 'conjugation reverso--urls)
+              "conjugation-"
+              (symbol-name language)
+              "-verb-"
+              (url-hexify-string word)
+              ".html")
+      :type "GET"
+      :headers `(("Accept" . "*/*")
+                 ("Connection" . "keep-alive")
+                 ("User-Agent" . ,reverso--user-agent))
+      :parser #'buffer-string
+      :encoding 'utf-8
+      :success (cl-function
+                (lambda (&key data &allow-other-keys)
+                  (let ((res (reverso--alist-remove-empty-values
+                              (reverso--get-conjugation-parse data))))
+                    (run-hook-with-args
+                     'reverso--operation-hook
+                     'reverso--get-conjugation res
+                     `((:word . ,word)
+                       (:language . ,language)))
+                    (funcall cb res))))
+      :error (cl-function
+              (lambda (&key error-thrown &allow-other-keys)
+                (message "Error!: %S" error-thrown))))))
 
 ;;; Buffers
 
