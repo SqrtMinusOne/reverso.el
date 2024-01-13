@@ -35,6 +35,7 @@
 ;; - "Context" or bilingual concordances (run `reverso-context')
 ;; - Grammar check (run `reverso-grammar')
 ;; - Synonyms search (run `reverso-synonyms')
+;; - Verb conjugation (run `reverso-conjugation')
 ;; There's also `reverso-grammar-buffer', which does grammar check in
 ;; the current buffer and displays the result with overlays.
 ;;
@@ -45,6 +46,8 @@
 ;; - `reverso--get-context'
 ;; - `reverso--get-grammar'
 ;; - `reverso--get-context'
+;; - `reverso--get-synonyms'
+;; - `reverso--get-conjugation'
 ;;
 ;; Also check out the README file at
 ;; <https://github.com/SqrtMinusOne/reverso.el>
@@ -55,6 +58,7 @@
 (require 'url-util)
 (require 'dom)
 (require 'widget)
+(require 'wid-edit)
 
 ;; XXX Compatibility with evil
 (declare-function evil-define-key* "evil-core")
@@ -171,7 +175,9 @@ This one is used for the synonym queries.")
     (grammar . (english french spanish italian))
     (synonyms . (arabic german english spanish french hebrew italian
                         japanese dutch polish portuguese romanian
-                        russian)))
+                        russian))
+    (conjugation . (english french spanish german italian portuguese
+                            hebrew russian arabic japanese)))
   "Available languages for diferent operations.")
 
 (defconst reverso--languages-compatible
@@ -260,7 +266,8 @@ This one is used for the synonym queries.")
   '((translation . "https://api.reverso.net/translate/v1/translation")
     (context . "https://context.reverso.net/translation/")
     (grammar . "https://orthographe.reverso.net/api/v1/Spelling")
-    (synonyms . "https://synonyms.reverso.net/synonym/"))
+    (synonyms . "https://synonyms.reverso.net/synonym/")
+    (conjugation . "https://conjugator.reverso.net/"))
   "URLs with reverso endpoints.")
 
 (defconst reverso--user-agents
@@ -672,6 +679,157 @@ SOURCE-TEXT is the text sent for checking.  DATA is the JSON reply."
       (:source-text-hl . ,source-text-hl)
       (:corrections . ,corrections))))
 
+(defun reverso--empty-to-nil (value)
+  "If VALUE is nil or empty, return nil, otherwise return VALUE."
+  (if (or (null value) (string-empty-p value))
+      nil
+    value))
+
+(defun reverso--get-conjugation-parse-alternate (data)
+  "Parse alternate verb forms in Reverso conjugation page.
+
+DATA is the DOM tree of the page."
+  (when-let ((alts (thread-first data
+                                 (dom-by-id "ch_divConjugatorHeader")
+                                 (dom-by-class "alternate-versions"))))
+    `((:model . ,(thread-first alts
+                               (dom-by-id (rx bos "ch_lblModel" eos))
+                               ;; (dom-by-tag 'a)
+                               (dom-texts)
+                               (string-trim)
+                               (reverso--empty-to-nil)))
+      (:auxiliary . ,(thread-first alts
+                                   (dom-by-id (rx bos "ch_lblAuxiliary" eos))
+                                   (dom-texts)
+                                   (string-trim)
+                                   (reverso--empty-to-nil)))
+      (:other-forms . ,(thread-first alts
+                                     (dom-by-id (rx bos "ch_lblAutreForm" eos))
+                                     (dom-texts)
+                                     (string-trim)
+                                     (reverso--empty-to-nil))))))
+
+(defun reverso--get-conjugation-parse-boxes (data)
+  "Parse verb conjugation boxes in Reverso conjugation page.
+
+DATA is the DOM tree of the page."
+  (when-let ((boxes (thread-first data
+                                  (dom-by-class "result-block-api")
+                                  (car)
+                                  (dom-by-class "blue-box-wrap"))))
+    (mapcar
+     (lambda (box)
+       (let* ((title (dom-attr box 'mobile-title))
+              (listing
+               (mapcar
+                (lambda (item)
+                  (let* ((text (string-trim (dom-texts item "")))
+                         (verb (thread-first item
+                                             (dom-by-class "verb")
+                                             (dom-texts)
+                                             (string-trim)))
+                         (verb-pos (string-match-p (regexp-quote verb) text))
+                         (v (dom-attr item 'v)))
+                    (when verb-pos
+                      (put-text-property
+                       verb-pos
+                       (+ verb-pos (length verb))
+                       'face
+                       'reverso-highlight-face
+                       text))
+                    (cons
+                     (replace-regexp-in-string
+                      (rx (+ space))
+                      " "
+                      text)
+                     v)))
+                (thread-first box
+                              (dom-by-class "wrap-verbs-listing")
+                              (dom-by-tag 'li))))
+              (listing-by-v
+               (mapcar (lambda (group)
+                         (cons
+                          (car group)
+                          (mapcar #'car (cdr group))))
+                       (seq-group-by #'cdr listing))))
+         `((:title . ,title)
+           (:listing . ,listing-by-v))))
+     boxes)))
+
+(defun reverso--get-conjugation-parse (data)
+  "Parse Reverso conjugation page.
+
+DATA is the HTML string of the page.  See `reverso--get-conjugation'
+for the return value."
+  (let* ((html (with-temp-buffer
+                 (insert data)
+                 (libxml-parse-html-region (point-min) (point-max))))
+         (word (thread-first html
+                             (dom-by-id "ch_lblVerb")
+                             (dom-texts)
+                             (string-trim)))
+         (translit-word
+          (thread-first html
+                        (dom-by-id "ch_lblVerbTranslit")
+                        (dom-texts)
+                        (string-trim)
+                        (reverso--empty-to-nil)))
+         (alternate (reverso--get-conjugation-parse-alternate html))
+         (boxes (reverso--get-conjugation-parse-boxes html)))
+    `((:word . ,word)
+      (:translit-word . ,translit-word)
+      (:alternate . ,alternate)
+      (:boxes . ,boxes))))
+
+(defun reverso--get-conjugation (word language cb)
+  "Get conjugation of verb WORD in LANGUAGE.
+
+LANGUAGE is a symbol.  See `reverso--languages' for supported
+languages.
+
+CB is a callback function that takes the response as its argument.
+The response is an alist with the following keys:
+- `:word': the word itself
+- `:translit-word': the transliteration of the word, if any
+- `:alternate' - alternate forms of the verb.
+   - `:model' - a model verb (a verb that cojugates the same way
+   - `:auxiliary' - auxiliary verbs (verbs that are used to form
+     compound tenses)
+   - `:other-forms' - other forms of the verb
+- `:boxes' - a list of conjugation boxes
+   - `:title' - the title of the box
+   - `:listing' - an alist with variant number as the key and a list of
+     conjugated forms as the value.  There's usually only one variant."
+  (unless (thread-last reverso--languages
+                       (alist-get 'conjugation)
+                       (alist-get language))
+    (request (concat
+              (alist-get 'conjugation reverso--urls)
+              "conjugation-"
+              (symbol-name language)
+              "-verb-"
+              (url-hexify-string word)
+              ".html")
+      :type "GET"
+      :headers `(("Accept" . "*/*")
+                 ("Connection" . "keep-alive")
+                 ("User-Agent" . ,reverso--user-agent))
+      :parser #'buffer-string
+      :encoding 'utf-8
+      :success (cl-function
+                (lambda (&key data &allow-other-keys)
+                  (let ((res (reverso--alist-remove-empty-values
+                              (reverso--get-conjugation-parse data))))
+                    (run-hook-with-args
+                     'reverso--operation-hook
+                     'reverso--get-conjugation res
+                     `((:word . ,word)
+                       (:language . ,language)))
+                    (funcall cb res))))
+      :error (cl-function
+              (lambda (&key error-thrown &allow-other-keys)
+                (message "Error!: %S" error-thrown))))))
+
 ;;; Buffers
 
 (defvar reverso-result-mode-map
@@ -928,6 +1086,48 @@ CORR is one element of the `:corrections' list, as defined in
          "]"))
       (insert "\n"))
     (insert "\n")))
+
+(defun reverso--conjugation-render (input data)
+  "Render conjugation results.
+
+DATA is a form as described in `reverso--get-conjugation'.  INPUT is
+the input string."
+  (setq-local reverso--input input)
+  (insert (propertize "Word: " 'face 'reverso-heading-face)
+          (alist-get :word data)
+          "\n\n")
+  (let ((alt (alist-get :alternate data)))
+    (when (or (alist-get :model alt)
+              (alist-get :auxiliary alt)
+              (alist-get :other-forms alt))
+      (insert (propertize "Alternate forms: " 'face 'reverso-heading-face)
+              "\n")
+      (when-let ((model (alist-get :model alt)))
+        (insert (propertize "Model" 'face 'reverso-keyword-face)
+                ": "
+                model "\n"))
+      (when-let ((auxiliary (alist-get :auxiliary alt)))
+        (insert (propertize "Auxiliary" 'face 'reverso-keyword-face)
+                ": " auxiliary "\n"))
+      (when-let ((other-forms (alist-get :other-forms alt)))
+        (insert (propertize "Other forms" 'face 'reverso-keyword-face)
+                ": " other-forms "\n"))
+      (insert "\n")))
+  (when-let ((boxes (alist-get :boxes data)))
+    ;; (insert (propertize "Conjugation: " 'face 'reverso-heading-face)
+    ;;         "\n")
+    (dolist (box boxes)
+      (insert (propertize (alist-get :title box)
+                          'face 'reverso-heading-face)
+              "\n")
+      (dolist (variant (alist-get :listing box))
+        (when (car variant)
+          (insert (propertize (concat (alist-get :title box) " (" (car variant) ")")
+                              'face 'reverso-heading-face)
+                  "\n"))
+        (dolist (line (cdr variant))
+          (insert "- " line "\n"))
+        (insert "\n")))))
 
 (defmacro reverso--with-buffer (&rest body)
   "Execute BODY in a clean `reverso' results buffer."
@@ -1211,7 +1411,16 @@ OP, DATA and PARAMS are as described in `reverso--operation-hook'."
         (cl-reduce (lambda (acc x)
                      (+ acc (length (alist-get :synonyms x))))
                    (nth 1 item)
-                   :initial-value 0)))))))
+                   :initial-value 0))))
+     ('reverso--get-conjugation
+      (list
+       "Conjugation"
+       (format
+        "%s: %s"
+        (propertize
+         (symbol-name (alist-get :language (nth 2 item)))
+         'face 'reverso-keyword-face)
+        (alist-get :word (nth 2 item))))))))
 
 (defun reverso--history-display (widget &rest _)
   "Action for displaying a history item in a WIDGET."
@@ -1234,6 +1443,10 @@ OP, DATA and PARAMS are as described in `reverso--operation-hook'."
         ('reverso--get-synonyms
          (reverso--synonyms-render
           (alist-get :text (nth 2 item))
+          (nth 1 item)))
+        ('reverso--get-conjugation
+         (reverso--conjugation-render
+          (alist-get :word (nth 2 item))
           (nth 1 item)))))))
 
 (defun reverso-history ()
@@ -1630,6 +1843,35 @@ inputs."
    (reverso--synonyms-exec-suffix)
    ("q" "Quit" transient-quit-one)])
 
+(transient-define-infix reverso--transient-conjugation-language ()
+  :class 'reverso--transient-language
+  :description "Language"
+  :key "s"
+  :argument "-s"
+  :languages (alist-get 'conjugation reverso--languages))
+
+(transient-define-suffix reverso--conjugation-exec-suffix (word language)
+  :key "e"
+  :description "Find conjugations"
+  (interactive (transient-args transient-current-command))
+  (reverso--get-conjugation
+   word language
+   (lambda (data)
+     (reverso--with-buffer
+       (reverso--conjugation-render word data)
+       (setq-local reverso--data data)))))
+
+;;;###autoload (autoload 'reverso-conjugation "reverso" nil t)
+(transient-define-prefix reverso-conjugation ()
+  "Find conjugations."
+  ["Input"
+   ("i" "Input" reverso--transient-input-infix)]
+  ["Parameters"
+   (reverso--transient-conjugation-language)]
+  ["Actions"
+   (reverso--conjugation-exec-suffix)
+   ("q" "Quit" transient-quit-one)])
+
 (transient-define-infix reverso--transient-grammar-language ()
   :class 'reverso--transient-language
   :description "Language"
@@ -1760,6 +2002,7 @@ The following features are implemented as nested transient buffers:
    ("t" "Translation" reverso-translate)
    ("c" "Context" reverso-context)
    ("s" "Synonyms" reverso-synonyms)
+   ("o" "Conjugation" reverso-conjugation)
    ("g" "Grammar check" reverso-grammar)
    ("b" "Grammar check in buffer" reverso-grammar-buffer)]
   ["Other"
