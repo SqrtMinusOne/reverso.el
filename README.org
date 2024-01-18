@@ -15,7 +15,13 @@ The package isn't yet available anywhere but in this repository. My preferred wa
   :straight (:host github :repo "SqrtMinusOne/reverso.el"))
 #+end_src
 
-Or clone the repository, add it to the =load-path= and =require= the package.
+Or [[https://tony-zorman.com/posts/use-package-vc.html][use-package with vc]], which works on Emacs 30 out-of-the-box.
+#+begin_src emacs-lisp
+(use-package reverso
+  :vc (:url "https://github.com/SqrtMinusOne/reverso.el.git"))
+#+end_src
+
+Alternatively, clone the repository, add it to the =load-path= and =require= the package.
 
 * Usage
 There's a single entrypoint for all implemented functions: =M-x reverso=. The UI is implemented using the excellent [[https://github.com/magit/transient/][transient.el]].
