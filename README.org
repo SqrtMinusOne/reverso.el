@@ -127,18 +127,18 @@ Enable =reverso-history-mode= to keep history:
 
 I haven't implemented persistence yet, but I might in the future.
 
-After enabling the minor mode, =M-x reverso-history= or =M-x reverso h= will display recent commans. =RET= on shows the results of each command.
+After enabling the minor mode, =M-x reverso-history= or =M-x reverso h= will display recent commands. =RET= on shows the results of each command.
 
 * Caveats
-Before proceeding further, here are some general caveats to be aware of.
+Before proceeding further, here are some caveats to be aware of.
 
-Firstly, the package uses a reverse-engineered API, so all the typical consequences apply, such as sudden irreparable breakages. Although I've been using it for over a year, so... maybe not.
+First, the package uses a reverse-engineered API, so all the typical consequences apply, such as sudden irreparable breakages. Although I've been using it for over a year, so... maybe not.
 
-Secondly, the limit on input size has been mentioned. The obvious is executing commands on a smaller region.
+Second, the limit on input size has been mentioned. The obvious workaround is executing commands on a smaller region.
 
-Thirdly, there have been reports that Reverso dispatches *IP bans* to particularly enthusiastic users, so be cautious if you're sending lots of automated queries. This is also why I didn't implement running one command for multiple consecutive regions.
+Third, there have been reports that Reverso dispatches *IP bans* to particularly enthusiastic users, so be cautious if you're sending lots of automated queries. This is also why I didn't implement running one command for multiple consecutive regions.
 
-Lastly, exercise caution with the content sent to the service. Avoid inadvertently sharing confidential information (like passwords) or anything that could be used against you in other ways. While the service claims to be [[https://www.reverso.net/privacy.aspx?lang=EN][GDPR-compliant]], we can't actually check that.
+Finally, exercise caution with the content sent to the service. Avoid inadvertently sharing confidential information (like passwords) or anything that could be used against you in other ways. While the service claims to be [[https://www.reverso.net/privacy.aspx?lang=EN][GDPR-compliant]], we can't actually check that.
 
 * Customization
 Run =M-x customize-group reverso= to view the available parameters. Here are a few.
