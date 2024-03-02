@@ -1,5 +1,7 @@
 #+TITLE: reverso.el
 
+[[https://melpa.org/#/reverso][file:https://melpa.org/packages/reverso-badge.svg]]
+
 Emacs client for [[https://www.reverso.net/][Reverso]]. The implemented features are:
 - [[https://www.reverso.net/text-translation][Translation]]
 - [[https://context.reverso.net/translation/][Context]] (AKA bilingual concordances)
@@ -8,11 +10,11 @@ Emacs client for [[https://www.reverso.net/][Reverso]]. The implemented features
 - [[https://conjugator.reverso.net/conjugation-english.html][Conjugation]]
 
 * Installation
-The package isn't yet available anywhere but in this repository. My preferred way for such cases is [[https://github.com/jwiegley/use-package][use-package]] and [[https://github.com/radian-software/straight.el][straight.el]]:
+The package is available on MELPA. Install it however you normally install packages, e.g. with [[https://github.com/jwiegley/use-package][use-package]] and [[https://github.com/radian-software/straight.el][straight.el]]:
 
 #+begin_src emacs-lisp
 (use-package reverso
-  :straight (:host github :repo "SqrtMinusOne/reverso.el"))
+  :straight t)
 #+end_src
 
 Or [[https://tony-zorman.com/posts/use-package-vc.html][use-package with vc]], which works on Emacs 30 out-of-the-box.
