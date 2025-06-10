@@ -344,10 +344,19 @@ The result is an alist with the following keys:
                          (origin . "reversomobile")
                          (sentenceSpliiter . :json-false)))
              (to . ,(alist-get target reverso--language-mapping))))
-    :headers `(("Content-Type" . "application/json")
-               ("Accept" . "*/*")
+    :headers `(("Accept" . "application/json, text/plain, */*")
+               ("Accept-Language" . "en-US,en;q=0.5")
                ("Connection" . "keep-alive")
-               ("User-Agent" . ,reverso--user-agent))
+               ("Content-Type" . "application/json")
+               ("Host" . "api.reverso.net")
+               ("Origin" . "https://www.reverso.net")
+               ("Referer" . "https://www.reverso.net")
+               ("Sec-Fetch-Dest" . "empty")
+               ("Sec-Fetch-Mode" . "cors")
+               ("Sec-Fetch-Site" . "same-site")
+               ("TE" . "trailers")
+               ("User-Agent" . ,reverso--user-agent)
+               ("X-Reverso-Origin" . "translation.web"))
     :parser 'json-read
     :encoding 'utf-8
     :success (cl-function
