@@ -4,7 +4,8 @@
 
 ;; Author: Korytov Pavel <thexcloud@gmail.com>
 ;; Maintainer: Korytov Pavel <thexcloud@gmail.com>
-;; Version: 0.1.2
+;; Package-Version: 0.1.2
+;; Package-Revision: 40ed3d83c4f0
 ;; Package-Requires: ((emacs "27.1") (transient "0.3.7") (request "0.3.2"))
 ;; Homepage: https://github.com/SqrtMinusOne/reverso.el
 ;; Published-At: 2022-08-28
@@ -1695,23 +1696,50 @@ OBJ is an instance of `reverso--transient-brief'."
   (setq reverso--prefer-brief
         (null (oref obj value))))
 
+(cl-defmethod transient-infix-value ((obj reverso--transient-brief))
+  "Return the value of the brief switch.
+
+OBJ is an instance of `reverso--transient-brief'."
+  (and (oref obj value) t))
+
 (transient-define-infix reverso--transient-input-infix ()
   :class 'reverso--transient-input
   :description "Input")
+
+(defun reverso--get-transient-value (class &optional is-target)
+  "Get the value of a transient infix by its CLASS.
+If IS-TARGET is non-nil, look for the target language infix.
+Uses the documented `transient-suffixes' function and `transient-infix-value'."
+  (when-let ((obj (cl-find-if
+                   (lambda (s)
+                     (and (cl-typep s class)
+                          (or (not (eq class 'reverso--transient-language))
+                              (eq (and (slot-boundp s 'is-target)
+                                       (oref s is-target))
+                                  is-target))))
+                   (transient-suffixes transient-current-command))))
+    (transient-infix-value obj)))
+
+(defun reverso--get-transient-switch (command)
+  "Get the value of a transient switch by its COMMAND symbol.
+Returns t if the switch is active, nil otherwise."
+  (when-let ((obj (cl-find-if
+                   (lambda (s)
+                     (and (slot-boundp s 'command)
+                          (eq (oref s command) command)))
+                   (transient-suffixes transient-current-command))))
+    (and (oref obj value) t)))
 
 (transient-define-infix reverso--transient-translate-language-source ()
   :class 'reverso--transient-language
   :description "Source language"
   :key "s"
-  ;; XXX not sure why `:argument' is necessary :(
-  :argument "-s"
   :languages (alist-get 'translation reverso--languages))
 
 (transient-define-infix reverso--transient-translate-language-target ()
   :class 'reverso--transient-language
   :description "Target language"
   :key "t"
-  :argument "-t"
   :languages (alist-get 'translation reverso--languages)
   :target-languages (alist-get 'translation reverso--languages-compatible)
   :is-target t)
@@ -1744,17 +1772,21 @@ OBJ is an instance of `reverso--transient-brief'."
   :argument "--brief"
   :description "Brief translation output")
 
-(transient-define-suffix reverso--translate-exec-suffix (input source target &optional is-brief)
+(transient-define-suffix reverso--translate-exec-suffix ()
   :key "e"
   :description "Translate"
-  (interactive (transient-args transient-current-command))
-  (reverso--translate
-   input source target
-   (lambda (data)
-     (reverso--with-buffer
-       (if is-brief
-           (reverso--translate-render-brief input data)
-         (reverso--translate-render input data))))))
+  (interactive)
+  (let ((input (reverso--get-transient-value 'reverso--transient-input))
+        (source (reverso--get-transient-value 'reverso--transient-language nil))
+        (target (reverso--get-transient-value 'reverso--transient-language t))
+        (is-brief (reverso--get-transient-value 'reverso--transient-brief)))
+    (reverso--translate
+     input source target
+     (lambda (data)
+       (reverso--with-buffer
+         (if is-brief
+             (reverso--translate-render-brief input data)
+           (reverso--translate-render input data)))))))
 
 ;;;###autoload (autoload 'reverso-translate "reverso" nil t)
 (transient-define-prefix reverso-translate ()
@@ -1783,28 +1815,29 @@ input."
   :class 'reverso--transient-language
   :description "Source language"
   :key "s"
-  :argument "-s"
   :languages (alist-get 'context reverso--languages))
 
 (transient-define-infix reverso--transient-context-language-target ()
   :class 'reverso--transient-language
   :description "Target language"
   :key "t"
-  :argument "-t"
   :languages (alist-get 'translation reverso--languages)
   :target-languages (alist-get 'context reverso--languages-compatible)
   :is-target t)
 
-(transient-define-suffix reverso--context-exec-suffix (input source target)
+(transient-define-suffix reverso--context-exec-suffix ()
   :key "e"
   :description "Find context"
-  (interactive (transient-args transient-current-command))
-  (reverso--get-context
-   input source target
-   (lambda (data)
-     (reverso--with-buffer
-       (reverso--context-render input data source target)
-       (setq-local reverso--data data)))))
+  (interactive)
+  (let ((input (reverso--get-transient-value 'reverso--transient-input))
+        (source (reverso--get-transient-value 'reverso--transient-language nil))
+        (target (reverso--get-transient-value 'reverso--transient-language t)))
+    (reverso--get-context
+     input source target
+     (lambda (data)
+       (reverso--with-buffer
+         (reverso--context-render input data source target)
+         (setq-local reverso--data data))))))
 
 ;;;###autoload (autoload 'reverso-context "reverso" nil t)
 (transient-define-prefix reverso-context ()
@@ -1827,19 +1860,20 @@ inputs."
   :class 'reverso--transient-language
   :description "Language"
   :key "s"
-  :argument "-s"
   :languages (alist-get 'synonyms reverso--languages))
 
-(transient-define-suffix reverso--synonyms-exec-suffix (input source)
+(transient-define-suffix reverso--synonyms-exec-suffix ()
   :key "e"
   :description "Find synonyms"
-  (interactive (transient-args transient-current-command))
-  (reverso--get-synonyms
-   input source
-   (lambda (data)
-     (reverso--with-buffer
-       (reverso--synonyms-render input data)
-       (setq-local reverso--data data)))))
+  (interactive)
+  (let ((input (reverso--get-transient-value 'reverso--transient-input))
+        (source (reverso--get-transient-value 'reverso--transient-language nil)))
+    (reverso--get-synonyms
+     input source
+     (lambda (data)
+       (reverso--with-buffer
+         (reverso--synonyms-render input data)
+         (setq-local reverso--data data))))))
 
 ;;;###autoload (autoload 'reverso-synonyms "reverso" nil t)
 (transient-define-prefix reverso-synonyms ()
@@ -1856,19 +1890,20 @@ inputs."
   :class 'reverso--transient-language
   :description "Language"
   :key "s"
-  :argument "-s"
   :languages (alist-get 'conjugation reverso--languages))
 
-(transient-define-suffix reverso--conjugation-exec-suffix (word language)
+(transient-define-suffix reverso--conjugation-exec-suffix ()
   :key "e"
   :description "Find conjugations"
-  (interactive (transient-args transient-current-command))
-  (reverso--get-conjugation
-   word language
-   (lambda (data)
-     (reverso--with-buffer
-       (reverso--conjugation-render word data)
-       (setq-local reverso--data data)))))
+  (interactive)
+  (let ((word (reverso--get-transient-value 'reverso--transient-input))
+        (language (reverso--get-transient-value 'reverso--transient-language nil)))
+    (reverso--get-conjugation
+     word language
+     (lambda (data)
+       (reverso--with-buffer
+         (reverso--conjugation-render word data)
+         (setq-local reverso--data data))))))
 
 ;;;###autoload (autoload 'reverso-conjugation "reverso" nil t)
 (transient-define-prefix reverso-conjugation ()
@@ -1885,19 +1920,20 @@ inputs."
   :class 'reverso--transient-language
   :description "Language"
   :key "s"
-  :argument "-s"
   :languages (alist-get 'grammar reverso--languages))
 
-(transient-define-suffix reverso--grammar-exec-suffix (input source)
+(transient-define-suffix reverso--grammar-exec-suffix ()
   :key "e"
   :description "Check grammar"
-  (interactive (transient-args transient-current-command))
-  (reverso--get-grammar
-   input source
-   (lambda (data)
-     (reverso--with-buffer
-       (reverso--grammar-render data)
-       (setq-local reverso--data data)))))
+  (interactive)
+  (let ((input (reverso--get-transient-value 'reverso--transient-input))
+        (source (reverso--get-transient-value 'reverso--transient-language nil)))
+    (reverso--get-grammar
+     input source
+     (lambda (data)
+       (reverso--with-buffer
+         (reverso--grammar-render data)
+         (setq-local reverso--data data))))))
 
 ;;;###autoload (autoload 'reverso-grammar "reverso" nil t)
 (transient-define-prefix reverso-grammar ()
@@ -1939,19 +1975,17 @@ The class doesn't actually have any value, but this is necessary for transient."
   ;; Just don't press ~ while in the buffer.
   :key "~~1")
 
-(transient-define-suffix reverso--grammar-buffer-exec-suffix
-  (language region-start region-end string-join)
+(transient-define-suffix reverso--grammar-buffer-exec-suffix ()
   :key "e"
   :description "Check grammar"
-  (interactive (append
-                (list (car (transient-args transient-current-command)))
-                (if (use-region-p)
-                    (list (region-beginning) (region-end))
-                  (list (point-min) (point-max)))
-                (list (cadr (transient-args transient-current-command)))))
-  (when (use-region-p)
-    (deactivate-mark))
-  (reverso-check-buffer language region-start region-end string-join))
+  (interactive)
+  (let ((language (reverso--get-transient-value 'reverso--transient-language nil))
+        (region-start (if (use-region-p) (region-beginning) (point-min)))
+        (region-end (if (use-region-p) (region-end) (point-max)))
+        (string-join (reverso--get-transient-switch 'reverso--transient-join-string)))
+    (when (use-region-p)
+      (deactivate-mark))
+    (reverso-check-buffer language region-start region-end string-join)))
 
 (defun reverso--check-fix-at-point-transient ()
   "Fix error at point, switch to next error and return to transient."
